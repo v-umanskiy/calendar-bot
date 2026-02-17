@@ -1,0 +1,106 @@
+import asyncio
+from typing import Optional
+
+from src.services import event_draft_table_service
+
+
+EVENT_DRAFT_TOOL_NAME = "upsert_event_draft"
+EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
+    "When the user wants to add, create, update, reschedule, or rename the current calendar event draft, "
+    "you must call the upsert_event_draft function with any known fields. "
+    "Use only these optional fields: start, end, title."
+)
+
+EVENT_DRAFT_TOOL_CONFIG = {
+    "systemInstruction": EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION,
+    "tools": [
+        {
+            "functionDeclarations": [
+                {
+                    "name": EVENT_DRAFT_TOOL_NAME,
+                    "description": (
+                        "Upsert the active event draft for the current chat. "
+                        "Call it whenever the user wants to add or modify draft event details."
+                    ),
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "start": {"type": "STRING"},
+                            "end": {"type": "STRING"},
+                            "title": {"type": "STRING"},
+                        },
+                    },
+                }
+            ]
+        }
+    ],
+}
+
+
+def execute_function_calls(function_calls: list[dict], chat_id: Optional[str]) -> list[dict]:
+    results: list[dict] = []
+    for function_call in function_calls:
+        result = execute_tool_call(function_call, chat_id)
+        results.append(
+            {
+                "name": function_call["name"],
+                "result": result,
+            }
+        )
+    return results
+
+
+def execute_tool_call(function_call: dict, chat_id: Optional[str]) -> dict:
+    if function_call["name"] != EVENT_DRAFT_TOOL_NAME:
+        return {"ok": False, "error": "unsupported_function"}
+
+    if chat_id is None:
+        return {"ok": False, "error": "missing_chat_id"}
+
+    args = function_call.get("args") or {}
+    if not isinstance(args, dict):
+        return {"ok": False, "error": "invalid_arguments"}
+
+    start = args.get("start")
+    end = args.get("end")
+    title = args.get("title")
+
+    try:
+        asyncio.run(
+            event_draft_table_service.upsert_event_draft(
+                chat_id=int(chat_id) if str(chat_id).isdigit() else str(chat_id),
+                start=start if start is None else str(start),
+                end=end if end is None else str(end),
+                title=title if title is None else str(title),
+            )
+        )
+        return {"ok": True}
+    except Exception as exc:
+        print("GEMINI_TOOL_EXECUTION_ERROR:", repr(exc))
+        return {"ok": False, "error": "tool_execution_failed"}
+
+
+def extract_response_content(response):
+    candidates = getattr(response, "candidates", None) or []
+    if not candidates:
+        return None
+    content = getattr(candidates[0], "content", None)
+    if content is None:
+        return None
+    return content.model_dump(exclude_none=True) if hasattr(content, "model_dump") else content
+
+
+def extract_function_calls(response) -> list[dict]:
+    raw_calls = getattr(response, "function_calls", None) or []
+    normalized: list[dict] = []
+    for raw_call in raw_calls:
+        if isinstance(raw_call, dict):
+            name = raw_call.get("name")
+            args = raw_call.get("args")
+        else:
+            name = getattr(raw_call, "name", None)
+            args = getattr(raw_call, "args", None)
+        if not name:
+            continue
+        normalized.append({"name": str(name), "args": args})
+    return normalized

@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+httpx
+google-genai
+google-api-core
+openai
+mangum
+python-dotenv
+markdown
+bleach
+pinecone
+langfuse==3.12.1

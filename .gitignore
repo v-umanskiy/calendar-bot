@@ -1,0 +1,6 @@
+build/
+deploy.zip
+.venv/
+.pytest_cache/
+__pycache__/
+*.pyc

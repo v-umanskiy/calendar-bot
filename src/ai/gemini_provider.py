@@ -1,0 +1,229 @@
+import asyncio
+import os
+from typing import Optional
+
+from google.api_core import exceptions as google_api_exceptions
+from google import genai
+
+from src.utils import logging_utils
+from src.utils.classifier_utils import parse_classifier_response
+from src.utils.constants import (
+    CLASSIFICATION_PROMPT_TEMPLATE,
+    MODEL_PROVIDER_LIMIT_REACHED_MESSAGE,
+    MODEL_PROVIDER_UNAVAILABLE_MESSAGE,
+)
+from .model_provider import ModelProvider, ModelHistory
+from . import gemini_tools
+from src.services import langfuse_service
+from src.services import secret_service
+
+class GeminiProvider(ModelProvider):
+    def __init__(self):
+        model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self._model_name = model_name
+        self._client = genai.Client(api_key=secret_service.get_secret("GEMINI_API_KEY"))
+
+    async def generate_reply(
+        self,
+        prompt: Optional[str] = None,
+        history: Optional[ModelHistory] = None,
+        file_bytes: Optional[bytes] = None,
+        chat_id: Optional[str] = None,
+    ) -> str:
+        gemini_history = self._convert_history(history)
+        try:
+            if file_bytes:
+                return await self._call_with_photo(file_bytes, prompt, history, gemini_history)
+            return await self._call_with_text(prompt or "", history, gemini_history, chat_id=chat_id)
+        except (
+            google_api_exceptions.ResourceExhausted,
+            google_api_exceptions.TooManyRequests,
+        ) as err:
+            print(f"Gemini API quota exhausted: {err}")
+            return MODEL_PROVIDER_LIMIT_REACHED_MESSAGE
+        except Exception as exc:
+            print("GEMINI_CALL_ERROR:", repr(exc))
+            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+
+    async def _call_with_text(
+        self,
+        prompt: str,
+        raw_history: Optional[ModelHistory],
+        gemini_history: list[dict],
+        *,
+        chat_id: Optional[str],
+    ) -> str:
+        self._log_call(prompt, raw_history)
+        metadata = {"history_length": len(raw_history or [])}
+        with langfuse_service.generation_context(
+            name="gemini.generate_reply",
+            model=self._model_name,
+            input={"prompt": prompt, "has_image": False},
+            metadata=metadata,
+            tags=["gemini", "chat"],
+        ) as generation:
+            contents = self._build_contents(gemini_history, [{"text": prompt}])
+            response, usage = await asyncio.to_thread(self._run_with_tools, contents, chat_id)
+            generation.record_output(response, usage=usage)
+        return response
+
+    async def _call_with_photo(
+        self,
+        file_bytes: bytes,
+        prompt: Optional[str],
+        raw_history: Optional[ModelHistory],
+        gemini_history: list[dict],
+    ) -> str:
+        self._log_call(prompt, raw_history, is_photo=True)
+        parts: list[dict] = []
+        prompt_text = prompt or ""
+        if prompt_text:
+            parts.append({"text": prompt_text})
+        parts.append({
+            "inline_data": {
+                "mime_type": "image/jpeg",
+                "data": file_bytes,
+            }
+        })
+        metadata = {"history_length": len(raw_history or [])}
+        with langfuse_service.generation_context(
+            name="gemini.generate_reply",
+            model=self._model_name,
+            input={"prompt": prompt_text, "has_image": True},
+            metadata=metadata,
+            tags=["gemini", "chat"],
+        ) as generation:
+            contents = self._build_contents(gemini_history, parts)
+            response, usage = await asyncio.to_thread(self._send_to_gemini, contents)
+            generation.record_output(response, usage=usage)
+        return response
+
+    def _log_call(
+        self,
+        prompt: Optional[str],
+        history: Optional[ModelHistory],
+        *,
+        is_photo: bool = False,
+    ) -> None:
+        prefix = "Calling Gemini with photo." if is_photo else "Calling Gemini."
+        logging_utils.log_prefixed_fields(
+            prefix,
+            ("PROMPT", prompt),
+            ("HISTORY", history),
+        )
+
+    def _send_to_gemini(self, contents: list[dict]) -> tuple[str, Optional[dict]]:
+        response = self._client.models.generate_content(
+            model=self._model_name,
+            contents=contents,
+        )
+        return response.text or "No response", self._extract_usage(response)
+
+    def _run_with_tools(
+        self,
+        contents: list[dict],
+        chat_id: Optional[str],
+    ) -> tuple[str, Optional[dict]]:
+        response = self._client.models.generate_content(
+            model=self._model_name,
+            contents=contents,
+            config=gemini_tools.EVENT_DRAFT_TOOL_CONFIG,
+        )
+        usage = self._extract_usage(response)
+        function_calls = gemini_tools.extract_function_calls(response)
+        if not function_calls:
+            return response.text or "No response", usage
+
+        gemini_tools.execute_function_calls(function_calls, chat_id)
+        return response.text or "No response", usage
+
+    @staticmethod
+    def _extract_usage(response) -> Optional[dict]:
+        usage_metadata = getattr(response, "usage_metadata", None)
+        if not usage_metadata:
+            return None
+        if isinstance(usage_metadata, dict):
+            prompt_tokens = usage_metadata.get("prompt_token_count")
+            completion_tokens = usage_metadata.get("candidates_token_count")
+            total_tokens = usage_metadata.get("total_token_count")
+        else:
+            prompt_tokens = getattr(usage_metadata, "prompt_token_count", None)
+            completion_tokens = getattr(usage_metadata, "candidates_token_count", None)
+            total_tokens = getattr(usage_metadata, "total_token_count", None)
+        usage = {}
+        if prompt_tokens is not None:
+            usage["prompt_tokens"] = prompt_tokens
+        if completion_tokens is not None:
+            usage["completion_tokens"] = completion_tokens
+        if total_tokens is not None:
+            usage["total_tokens"] = total_tokens
+        return usage or None
+
+    async def classify_user_message(self, message: str) -> str:
+        prompt = CLASSIFICATION_PROMPT_TEMPLATE + (message or "")
+        logging_utils.log_prefixed_fields(
+            "Calling Gemini classifier.",
+            ("PROMPT", prompt),
+        )
+
+        def _call_classifier() -> tuple[str, Optional[dict]]:
+            contents = self._build_contents([], [{"text": prompt}])
+            response = self._client.models.generate_content(
+                model=self._model_name,
+                contents=contents,
+            )
+            return response.text or "", self._extract_usage(response)
+
+        try:
+            with langfuse_service.generation_context(
+                name="gemini.classify",
+                model=self._model_name,
+                input=prompt,
+                tags=["gemini", "classifier"],
+            ) as generation:
+                raw_response, usage = await asyncio.to_thread(_call_classifier)
+                generation.record_output(raw_response, usage=usage)
+        except Exception as exc:
+            print("GEMINI_CLASSIFY_CALL_ERROR:", repr(exc))
+            return "other"
+
+        logging_utils.log_prefixed_message(
+            "Gemini classifier raw response",
+            raw_response,
+        )
+        return parse_classifier_response(raw_response)
+
+    def _build_contents(self, history: list[dict], parts: list[dict]) -> list[dict]:
+        contents = list(history)
+        contents.append({"role": "user", "parts": parts})
+        return contents
+
+    def _convert_history(self, history: Optional[ModelHistory]) -> list[dict]:
+        converted: list[dict] = []
+        if not history:
+            return converted
+
+        for turn in history:
+            parts: list[dict] = []
+            text = turn.get("text")
+            if text:
+                parts.append({"text": text})
+
+            for file_entry in turn.get("files", []):
+                data = file_entry.get("data")
+                if not data:
+                    continue
+                mime_type = file_entry.get("mime_type", "image/jpeg")
+                parts.append({
+                    "inline_data": {
+                        "mime_type": mime_type,
+                        "data": data,
+                    }
+                })
+
+            if not parts:
+                continue
+
+            role = "user" if turn.get("role") == "user" else "model"
+            converted.append({"role": role, "parts": parts})
+        return converted
