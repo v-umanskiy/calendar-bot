@@ -1,40 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Deploys tg-calendar-bot to dev.
 # Usage:
-#   ./deploy.sh dev
-#   ./deploy.sh prod
-
-ENVIRONMENT="${1:-}"
-if [[ -z "$ENVIRONMENT" ]]; then
-  echo "Usage: $0 {dev|prod}"
-  exit 1
-fi
+#   ./deploy.sh
 
 PROFILE="personal"
 ZIP_NAME="deploy.zip"
 BUILD_DIR="build"
 REQ_FILE="requirements.txt"
 S3_BUCKET="${S3_BUCKET:-}"
-
-case "$ENVIRONMENT" in
-  dev)
-    REGION="eu-central-1"
-    PRIMARY_LAMBDA_NAME="ai_bot_dev"
-    TRANSCRIPT_LAMBDA_NAME="ai_bot_dev_transcript"
-    DEFAULT_S3_BUCKET="ai-bot-dev-artifacts"
-    ;;
-  prod)
-    REGION="eu-west-1"
-    PRIMARY_LAMBDA_NAME="tg-gemini-bot"
-    TRANSCRIPT_LAMBDA_NAME="tg-gemini-bot-transcript"
-    DEFAULT_S3_BUCKET="ai-bot-prod-artifacts"
-    ;;
-  *)
-    echo "Unknown environment '$ENVIRONMENT' (use dev or prod)"
-    exit 1
-    ;;
-esac
+ENVIRONMENT="dev"
+REGION="eu-central-1"
+PRIMARY_LAMBDA_NAME="calendar_bot_dev"
+TRANSCRIPT_LAMBDA_NAME="calendar_bot_dev_transcript"
+DEFAULT_S3_BUCKET="calendar-bot-dev-artifacts"
 
 if [[ -z "$S3_BUCKET" ]]; then
   S3_BUCKET="$DEFAULT_S3_BUCKET"
