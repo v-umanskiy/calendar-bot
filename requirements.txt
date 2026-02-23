@@ -9,4 +9,3 @@ python-dotenv
 markdown
 bleach
 pinecone
-langfuse==3.12.1

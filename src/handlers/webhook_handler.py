@@ -1,5 +1,4 @@
 from src.services import cleanup_service
-from src.services import langfuse_service
 from src.messaging import message_handlers
 from . import transcription_handler
 
@@ -28,21 +27,6 @@ async def _handle_telegram_webhook_data(data: any) -> any:
     document = message.get("document")
     text = message.get("text")
 
-    trace = langfuse_service.start_trace(
-        name="telegram_webhook",
-        user_id=str(chat_id),
-        session_id=str(chat_id),
-        input=text if text else None,
-        metadata={
-            "message_id": message.get("message_id"),
-            "has_photo": bool(photos),
-            "has_voice": bool(voice),
-            "has_document": bool(document),
-            "has_text": bool(text),
-        },
-        tags=["telegram"],
-    )
-
     reply = None
     try:
         if photos:
@@ -57,17 +41,8 @@ async def _handle_telegram_webhook_data(data: any) -> any:
             reply = await message_handlers.handle_text_message(chat_id, text)
         else:
             reply = await message_handlers.handle_unsupported_message(chat_id)
-        langfuse_service.end_trace(
-            trace,
-            status="ok",
-            output=reply,
-        )
     except Exception as exc:
-        langfuse_service.end_trace(
-            trace,
-            status="error",
-            metadata={"error": repr(exc)},
-        )
+        print("Error while processing Telegram webhook:", exc)
     finally:
         await cleanup_service.cleanup_chat_history(chat_id)
         return {"ok": True}

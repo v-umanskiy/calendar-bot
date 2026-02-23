@@ -14,7 +14,6 @@ from src.utils.constants import (
 )
 from .model_provider import ModelProvider, ModelHistory
 from . import gemini_tools
-from src.services import langfuse_service
 from src.services import secret_service
 
 class GeminiProvider(ModelProvider):
@@ -54,17 +53,8 @@ class GeminiProvider(ModelProvider):
         chat_id: Optional[str],
     ) -> str:
         self._log_call(prompt, raw_history)
-        metadata = {"history_length": len(raw_history or [])}
-        with langfuse_service.generation_context(
-            name="gemini.generate_reply",
-            model=self._model_name,
-            input={"prompt": prompt, "has_image": False},
-            metadata=metadata,
-            tags=["gemini", "chat"],
-        ) as generation:
-            contents = self._build_contents(gemini_history, [{"text": prompt}])
-            response, usage = await asyncio.to_thread(self._run_with_tools, contents, chat_id)
-            generation.record_output(response, usage=usage)
+        contents = self._build_contents(gemini_history, [{"text": prompt}])
+        response, _ = await asyncio.to_thread(self._run_with_tools, contents, chat_id)
         return response
 
     async def _call_with_photo(
@@ -85,17 +75,8 @@ class GeminiProvider(ModelProvider):
                 "data": file_bytes,
             }
         })
-        metadata = {"history_length": len(raw_history or [])}
-        with langfuse_service.generation_context(
-            name="gemini.generate_reply",
-            model=self._model_name,
-            input={"prompt": prompt_text, "has_image": True},
-            metadata=metadata,
-            tags=["gemini", "chat"],
-        ) as generation:
-            contents = self._build_contents(gemini_history, parts)
-            response, usage = await asyncio.to_thread(self._send_to_gemini, contents)
-            generation.record_output(response, usage=usage)
+        contents = self._build_contents(gemini_history, parts)
+        response, _ = await asyncio.to_thread(self._send_to_gemini, contents)
         return response
 
     def _log_call(
@@ -175,14 +156,7 @@ class GeminiProvider(ModelProvider):
             return response.text or "", self._extract_usage(response)
 
         try:
-            with langfuse_service.generation_context(
-                name="gemini.classify",
-                model=self._model_name,
-                input=prompt,
-                tags=["gemini", "classifier"],
-            ) as generation:
-                raw_response, usage = await asyncio.to_thread(_call_classifier)
-                generation.record_output(raw_response, usage=usage)
+            raw_response, _ = await asyncio.to_thread(_call_classifier)
         except Exception as exc:
             print("GEMINI_CLASSIFY_CALL_ERROR:", repr(exc))
             return "other"

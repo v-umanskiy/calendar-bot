@@ -12,7 +12,6 @@ from src.utils.constants import (
 )
 from src.utils.classifier_utils import parse_classifier_response
 from .model_provider import ModelProvider, ModelHistory
-from src.services import langfuse_service
 from src.services import secret_service
 
 
@@ -87,17 +86,8 @@ class OpenAIProvider(ModelProvider):
             content.append({"type": "text", "text": ""})
         messages.append({"role": "user", "content": content})
 
-        metadata = {"history_length": len(history or [])}
         try:
-            with langfuse_service.generation_context(
-                name="openai.generate_reply",
-                model=self._chat_model,
-                input={"prompt": prompt_text, "has_file": bool(file_bytes)},
-                metadata=metadata,
-                tags=["openai", "chat"],
-            ) as generation:
-                response_text, usage = await asyncio.to_thread(self._send_completion, messages)
-                generation.record_output(response_text, usage=usage)
+            response_text, _ = await asyncio.to_thread(self._send_completion, messages)
         except Exception as exc:
             print("OPENAI_CALL_ERROR:", repr(exc))
             return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
@@ -144,14 +134,7 @@ class OpenAIProvider(ModelProvider):
 
         payload = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
         try:
-            with langfuse_service.generation_context(
-                name="openai.classify",
-                model=self._classifier_model,
-                input=prompt,
-                tags=["openai", "classifier"],
-            ) as generation:
-                response_text, usage = await asyncio.to_thread(self._send_completion, payload)
-                generation.record_output(response_text, usage=usage)
+            response_text, _ = await asyncio.to_thread(self._send_completion, payload)
         except Exception as exc:
             print("OPENAI_CLASSIFY_CALL_ERROR:", repr(exc))
             return "other"

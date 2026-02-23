@@ -1,9 +1,7 @@
 import math
 import os
-from datetime import datetime, timezone
 from typing import Dict, List
 from src.services import secret_service
-from src.services import langfuse_service
 
 from openai import OpenAI
 from pinecone import Pinecone
@@ -20,40 +18,9 @@ pc = Pinecone(api_key=secret_service.get_secret("PINECONE_API_KEY"))
 index = pc.Index(INDEX_NAME)
 openai_client = OpenAI(api_key=secret_service.get_secret("OPENAI_API_KEY"))
 
-
-def _truncate_text(text: str, limit: int = 500) -> str:
-    if len(text) <= limit:
-        return text
-    return f"{text[:limit]}…"
-
-
 def _embed_text(text: str):
-    start_time = datetime.now(timezone.utc)
-    try:
-        response = openai_client.embeddings.create(model=EMBED_MODEL, input=text)
-        embedding = response.data[0].embedding
-    except Exception as exc:
-        end_time = datetime.now(timezone.utc)
-        langfuse_service.record_span(
-            name="openai.embed",
-            input=_truncate_text(text),
-            metadata={"model": EMBED_MODEL, "error": repr(exc)},
-            tags=["openai", "embed"],
-            start_time=start_time,
-            end_time=end_time,
-        )
-        raise
-
-    end_time = datetime.now(timezone.utc)
-    langfuse_service.record_span(
-        name="openai.embed",
-        input=_truncate_text(text),
-        output={"embedding_length": len(embedding)},
-        metadata={"model": EMBED_MODEL},
-        tags=["openai", "embed"],
-        start_time=start_time,
-        end_time=end_time,
-    )
+    response = openai_client.embeddings.create(model=EMBED_MODEL, input=text)
+    embedding = response.data[0].embedding
     return embedding
 
 

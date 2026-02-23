@@ -35,9 +35,11 @@ rm -rf "$BUILD_DIR" "$ZIP_NAME"
 mkdir -p "$BUILD_DIR"
 
 echo "==> Installing dependencies"
-pip install -r "$REQ_FILE" \
+python3 -m pip install -r "$REQ_FILE" \
   --platform manylinux2014_x86_64 \
+  --python-version 312 \
   --only-binary=:all: \
+  --implementation cp \
   --target "$BUILD_DIR"
 
 echo "==> Copying source files"
