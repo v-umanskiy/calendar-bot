@@ -14,6 +14,10 @@ from .model_provider import ModelProvider, ModelHistory
 from . import gemini_tools
 from src.services import secret_service
 
+
+MAX_INVALID_REPAIR_ATTEMPTS = 2
+
+
 class GeminiProvider(ModelProvider):
     def __init__(self):
         model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
@@ -116,29 +120,111 @@ class GeminiProvider(ModelProvider):
         function_results = gemini_tools.execute_function_calls(function_calls, chat_id)
         upsert_result = gemini_tools.find_upsert_result(function_results)
         if upsert_result and upsert_result.get("ok"):
+            function_results, upsert_result = self._repair_invalid_result_if_needed(
+                contents,
+                chat_id,
+                function_results,
+                upsert_result,
+            )
+
+        if upsert_result and upsert_result.get("ok"):
             missing_required = upsert_result.get("missing_required") or []
             invalid_fields = upsert_result.get("invalid_fields") or []
             if not missing_required and not invalid_fields:
                 return gemini_tools.build_complete_draft_summary(upsert_result.get("draft") or {}), usage
+            if invalid_fields:
+                follow_up_response = self._client.models.generate_content(
+                    model=self._model_name,
+                    contents=self._build_invalid_follow_up_contents(contents, function_results),
+                )
+                follow_up_text = follow_up_response.text or ""
+                if follow_up_text:
+                    return follow_up_text, usage
+            elif missing_required:
+                follow_up_response = self._client.models.generate_content(
+                    model=self._model_name,
+                    contents=self._build_missing_follow_up_contents(contents, function_results),
+                )
+                follow_up_text = follow_up_response.text or ""
+                if follow_up_text:
+                    return follow_up_text, usage
 
         follow_up_response = self._client.models.generate_content(
             model=self._model_name,
-            contents=self._build_follow_up_contents(contents, function_results),
+            contents=self._build_missing_follow_up_contents(contents, function_results),
         )
         follow_up_text = follow_up_response.text or ""
         if follow_up_text:
             return follow_up_text, usage
         return response.text or "No response", usage
 
+    def _repair_invalid_result_if_needed(
+        self,
+        contents: list[dict],
+        chat_id: Optional[str],
+        function_results: list[dict],
+        upsert_result: dict,
+    ) -> tuple[list[dict], dict]:
+        current_results = function_results
+        current_upsert_result = upsert_result
+
+        for _ in range(MAX_INVALID_REPAIR_ATTEMPTS):
+            invalid_fields = current_upsert_result.get("invalid_fields") or []
+            if not invalid_fields:
+                break
+
+            repair_response = self._client.models.generate_content(
+                model=self._model_name,
+                contents=self._build_invalid_repair_contents(contents, current_results),
+                config=gemini_tools.EVENT_DRAFT_TOOL_CONFIG,
+            )
+            repair_calls = gemini_tools.extract_function_calls(repair_response)
+            if not repair_calls:
+                break
+
+            current_results = gemini_tools.execute_function_calls(repair_calls, chat_id)
+            next_upsert_result = gemini_tools.find_upsert_result(current_results)
+            if not next_upsert_result or not next_upsert_result.get("ok"):
+                break
+            current_upsert_result = next_upsert_result
+
+        return current_results, current_upsert_result
+
     @staticmethod
-    def _build_follow_up_contents(contents: list[dict], function_results: list[dict]) -> list[dict]:
+    def _build_invalid_repair_contents(contents: list[dict], function_results: list[dict]) -> list[dict]:
+        repair_instruction = (
+            "Tool call results indicate invalid_fields. This is your formatting/normalization failure.\n"
+            f"Tool results JSON:\n{gemini_tools.tool_results_to_json(function_results)}\n\n"
+            "Try to correct invalid fields to RFC3339 with timezone offset and call upsert_event_draft again.\n"
+            "Only include corrected values for invalid fields.\n"
+            "If you cannot confidently normalize from context, do not guess; ask the user a concise clarification question."
+        )
+        updated_contents = list(contents)
+        updated_contents.append({"role": "user", "parts": [{"text": repair_instruction}]})
+        return updated_contents
+
+    @staticmethod
+    def _build_missing_follow_up_contents(contents: list[dict], function_results: list[dict]) -> list[dict]:
         follow_up_instruction = (
             "Tool calls were executed. Use this JSON result to continue the conversation:\n"
             f"{gemini_tools.tool_results_to_json(function_results)}\n\n"
             "If missing_required has entries, ask the user only for those missing mandatory fields.\n"
-            "If invalid_fields has entries, ask user to correct those exact fields.\n"
             "Be concise and ask only one focused follow-up question when possible.\n"
             "Do not mention internal tools."
+        )
+        updated_contents = list(contents)
+        updated_contents.append({"role": "user", "parts": [{"text": follow_up_instruction}]})
+        return updated_contents
+
+    @staticmethod
+    def _build_invalid_follow_up_contents(contents: list[dict], function_results: list[dict]) -> list[dict]:
+        follow_up_instruction = (
+            "Tool calls were executed. Use this JSON result to continue the conversation:\n"
+            f"{gemini_tools.tool_results_to_json(function_results)}\n\n"
+            "invalid_fields are still present after normalization attempts.\n"
+            "Ask a neutral clarification question for explicit date/time with timezone.\n"
+            "Do not blame the user and do not mention internal tools.\n"
+            "Be concise and ask only one focused follow-up question."
         )
         updated_contents = list(contents)
         updated_contents.append({"role": "user", "parts": [{"text": follow_up_instruction}]})

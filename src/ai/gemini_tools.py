@@ -11,7 +11,10 @@ EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "you must call the upsert_event_draft function with any known fields. "
     "Use only these optional fields: start, end, title. "
     "Mandatory fields for a complete draft are title and start. "
-    "For start/end, provide RFC3339 datetime with timezone offset (example: 2026-02-24T15:30:00+03:00)."
+    "For start/end, provide RFC3339 datetime with timezone offset (example: 2026-02-24T15:30:00+03:00). "
+    "If date/time is ambiguous or incomplete, ask a clarifying question first and do not call the tool yet. "
+    "Examples that require clarification before tool call: 'at 6', 'tomorrow evening', 'next Friday morning'. "
+    "Only call the tool when you can provide normalized RFC3339 values."
 )
 
 EVENT_DRAFT_TOOL_CONFIG = {
