@@ -7,6 +7,9 @@ from src.services import event_draft_table_service
 
 EVENT_DRAFT_TOOL_NAME = "upsert_event_draft"
 EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
+    "You are a calendar assistant. "
+    "If a user asks unrelated questions, briefly decline and redirect to calendar help. "
+    "Short follow-ups inside an active draft flow are expected and should be interpreted in calendar context. "
     "When the user wants to add, create, update, reschedule, or rename the current calendar event draft, "
     "you must call the upsert_event_draft function with any known fields. "
     "Use only these optional fields: start, end, title. "
