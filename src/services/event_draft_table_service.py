@@ -1,9 +1,17 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from src.utils import logging_utils
 from src.repository import event_draft_repository
 
 MANDATORY_FIELDS = ("title", "start")
+
+
+def _is_non_blank(value) -> bool:
+    return value is not None and bool(str(value).strip())
+
+
+def _is_blank(value) -> bool:
+    return value is None or not str(value).strip()
 
 
 def _parse_rfc3339_with_offset(value: str | None) -> datetime | None:
@@ -37,7 +45,7 @@ def _validate_draft(draft: dict) -> tuple[list[str], list[dict]]:
 
     start_dt = None
     end_dt = None
-    if start_value not in (None, ""):
+    if _is_non_blank(start_value):
         start_dt = _parse_rfc3339_with_offset(str(start_value))
         if start_dt is None:
             invalid_fields.append(
@@ -47,7 +55,7 @@ def _validate_draft(draft: dict) -> tuple[list[str], list[dict]]:
                     "value": str(start_value),
                 }
             )
-    if end_value not in (None, ""):
+    if _is_non_blank(end_value):
         end_dt = _parse_rfc3339_with_offset(str(end_value))
         if end_dt is None:
             invalid_fields.append(
@@ -76,12 +84,72 @@ async def upsert_event_draft(
     end: str | None = None,
     title: str | None = None,
 ):
+    start_dt = _parse_rfc3339_with_offset(start) if _is_non_blank(start) else None
+    if _is_non_blank(start) and start_dt is None:
+        return {
+            "ok": True,
+            "draft": {
+                "title": title,
+                "start": start,
+                "end": end,
+            },
+            "missing_required": [],
+            "invalid_fields": [
+                {
+                    "field": "start",
+                    "reason": "invalid_rfc3339_with_offset",
+                    "value": str(start),
+                }
+            ],
+        }
+
+    normalized_end = end
+    if start_dt is not None and _is_blank(end):
+        normalized_end = (start_dt + timedelta(hours=1)).isoformat(timespec="seconds")
+
+    end_dt = _parse_rfc3339_with_offset(normalized_end) if _is_non_blank(normalized_end) else None
+    if _is_non_blank(normalized_end) and end_dt is None:
+        return {
+            "ok": True,
+            "draft": {
+                "title": title,
+                "start": start,
+                "end": normalized_end,
+            },
+            "missing_required": [],
+            "invalid_fields": [
+                {
+                    "field": "end",
+                    "reason": "invalid_rfc3339_with_offset",
+                    "value": str(normalized_end),
+                }
+            ],
+        }
+
+    if start_dt is not None and end_dt is not None and end_dt <= start_dt:
+        return {
+            "ok": True,
+            "draft": {
+                "title": title,
+                "start": start,
+                "end": normalized_end,
+            },
+            "missing_required": [],
+            "invalid_fields": [
+                {
+                    "field": "end",
+                    "reason": "must_be_after_start",
+                    "value": str(normalized_end),
+                }
+            ],
+        }
+
     fields: dict = {}
 
     if start is not None:
         fields["start"] = start
-    if end is not None:
-        fields["end"] = end
+    if normalized_end is not None:
+        fields["end"] = normalized_end
     if title is not None:
         fields["title"] = title
 
