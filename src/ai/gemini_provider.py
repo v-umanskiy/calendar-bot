@@ -113,8 +113,36 @@ class GeminiProvider(ModelProvider):
         if not function_calls:
             return response.text or "No response", usage
 
-        gemini_tools.execute_function_calls(function_calls, chat_id)
+        function_results = gemini_tools.execute_function_calls(function_calls, chat_id)
+        upsert_result = gemini_tools.find_upsert_result(function_results)
+        if upsert_result and upsert_result.get("ok"):
+            missing_required = upsert_result.get("missing_required") or []
+            invalid_fields = upsert_result.get("invalid_fields") or []
+            if not missing_required and not invalid_fields:
+                return gemini_tools.build_complete_draft_summary(upsert_result.get("draft") or {}), usage
+
+        follow_up_response = self._client.models.generate_content(
+            model=self._model_name,
+            contents=self._build_follow_up_contents(contents, function_results),
+        )
+        follow_up_text = follow_up_response.text or ""
+        if follow_up_text:
+            return follow_up_text, usage
         return response.text or "No response", usage
+
+    @staticmethod
+    def _build_follow_up_contents(contents: list[dict], function_results: list[dict]) -> list[dict]:
+        follow_up_instruction = (
+            "Tool calls were executed. Use this JSON result to continue the conversation:\n"
+            f"{gemini_tools.tool_results_to_json(function_results)}\n\n"
+            "If missing_required has entries, ask the user only for those missing mandatory fields.\n"
+            "If invalid_fields has entries, ask user to correct those exact fields.\n"
+            "Be concise and ask only one focused follow-up question when possible.\n"
+            "Do not mention internal tools."
+        )
+        updated_contents = list(contents)
+        updated_contents.append({"role": "user", "parts": [{"text": follow_up_instruction}]})
+        return updated_contents
 
     @staticmethod
     def _extract_usage(response) -> Optional[dict]:

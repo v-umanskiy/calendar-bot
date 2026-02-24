@@ -1,4 +1,5 @@
 import asyncio
+import json
 from typing import Optional
 
 from src.services import event_draft_table_service
@@ -8,7 +9,9 @@ EVENT_DRAFT_TOOL_NAME = "upsert_event_draft"
 EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "When the user wants to add, create, update, reschedule, or rename the current calendar event draft, "
     "you must call the upsert_event_draft function with any known fields. "
-    "Use only these optional fields: start, end, title."
+    "Use only these optional fields: start, end, title. "
+    "Mandatory fields for a complete draft are title and start. "
+    "For start/end, provide RFC3339 datetime with timezone offset (example: 2026-02-24T15:30:00+03:00)."
 )
 
 EVENT_DRAFT_TOOL_CONFIG = {
@@ -66,7 +69,7 @@ def execute_tool_call(function_call: dict, chat_id: Optional[str]) -> dict:
     title = args.get("title")
 
     try:
-        asyncio.run(
+        return asyncio.run(
             event_draft_table_service.upsert_event_draft(
                 chat_id=int(chat_id) if str(chat_id).isdigit() else str(chat_id),
                 start=start if start is None else str(start),
@@ -74,10 +77,39 @@ def execute_tool_call(function_call: dict, chat_id: Optional[str]) -> dict:
                 title=title if title is None else str(title),
             )
         )
-        return {"ok": True}
     except Exception as exc:
         print("GEMINI_TOOL_EXECUTION_ERROR:", repr(exc))
         return {"ok": False, "error": "tool_execution_failed"}
+
+
+def find_upsert_result(function_results: list[dict]) -> Optional[dict]:
+    for item in function_results:
+        if item.get("name") != EVENT_DRAFT_TOOL_NAME:
+            continue
+        result = item.get("result")
+        if isinstance(result, dict):
+            return result
+    return None
+
+
+def tool_results_to_json(function_results: list[dict]) -> str:
+    try:
+        return json.dumps(function_results, ensure_ascii=True)
+    except Exception:
+        return "[]"
+
+
+def build_complete_draft_summary(draft: dict) -> str:
+    title = draft.get("title") if isinstance(draft, dict) else None
+    start = draft.get("start") if isinstance(draft, dict) else None
+    end = draft.get("end") if isinstance(draft, dict) else None
+    lines = [
+        "Draft event summary:",
+        f"Title: {title or '(missing)'}",
+        f"Start: {start or '(missing)'}",
+        f"End: {end or '(not set)'}",
+    ]
+    return "\n".join(lines)
 
 
 def extract_response_content(response):
