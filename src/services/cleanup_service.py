@@ -1,6 +1,7 @@
 import os
 from src.utils import logging_utils
 
+from . import event_draft_table_service
 from . import history_table_service
 from . import s3_service
 from . import transcription_table_service
@@ -14,6 +15,8 @@ async def cleanup_chat_history(chat_id: int, *, full: bool = False) -> None:
     try:
         keep = None if full else WINDOW_TURNS
         deleted_turns = await history_table_service.delete_turns(chat_id, keep=keep)
+        if full:
+            await event_draft_table_service.delete_event_draft(chat_id)
 
         deleted_turns = deleted_turns or []
         file_keys = [item["file_key"] for item in deleted_turns if item.get("file_key")]

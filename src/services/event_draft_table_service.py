@@ -200,3 +200,7 @@ async def replace_event_draft(
 
     logging_utils.log_prefixed_message_full("Replacing event draft", item)
     return await event_draft_repository.replace_draft_item(item)
+
+
+async def delete_event_draft(chat_id: int):
+    return await event_draft_repository.delete_draft(str(chat_id))
