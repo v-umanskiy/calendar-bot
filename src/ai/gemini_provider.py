@@ -130,7 +130,11 @@ class GeminiProvider(ModelProvider):
         function_calls = gemini_tools.extract_function_calls(response)
         if not function_calls:
             return response.text or "No response", usage
+        if len(function_calls) > 1:
+            print("GEMINI_TOOL_VALIDATION_ERROR: expected at most one function call")
+            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE, usage
 
+        event_draft_tool_name = function_calls[0].get("name")
         function_results = gemini_tools.execute_function_calls(function_calls, chat_id)
         event_draft_result = gemini_tools.find_event_draft_result(function_results)
         if event_draft_result and event_draft_result.get("ok"):
@@ -145,7 +149,10 @@ class GeminiProvider(ModelProvider):
             missing_required = event_draft_result.get("missing_required") or []
             invalid_fields = event_draft_result.get("invalid_fields") or []
             if not missing_required and not invalid_fields:
-                return gemini_tools.build_complete_draft_summary(event_draft_result.get("draft") or {}), usage
+                return gemini_tools.build_complete_draft_summary(
+                    event_draft_result.get("draft") or {},
+                    tool_name=event_draft_tool_name,
+                ), usage
             if invalid_fields:
                 follow_up_response = self._client.models.generate_content(
                     model=self._model_name,
@@ -195,8 +202,11 @@ class GeminiProvider(ModelProvider):
             repair_calls = gemini_tools.extract_function_calls(repair_response)
             if not repair_calls:
                 break
+            if len(repair_calls) > 1:
+                print("GEMINI_TOOL_VALIDATION_ERROR: expected at most one repair function call")
+                break
 
-            current_results = gemini_tools.execute_function_calls(repair_calls, chat_id)
+            current_results = gemini_tools.execute_function_calls([repair_calls[0]], chat_id)
             next_event_draft_result = gemini_tools.find_event_draft_result(current_results)
             if not next_event_draft_result or not next_event_draft_result.get("ok"):
                 break

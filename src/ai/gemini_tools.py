@@ -136,12 +136,17 @@ def tool_results_to_json(function_results: list[dict]) -> str:
         return "[]"
 
 
-def build_complete_draft_summary(draft: dict) -> str:
+def build_complete_draft_summary(draft: dict, tool_name: Optional[str] = None) -> str:
     title = draft.get("title") if isinstance(draft, dict) else None
     start = draft.get("start") if isinstance(draft, dict) else None
     end = draft.get("end") if isinstance(draft, dict) else None
+    action = (
+        "Started a new draft event"
+        if tool_name == NEW_EVENT_DRAFT_TOOL_NAME
+        else "Updated current draft event"
+    )
     lines = [
-        "Draft event summary:",
+        f"Action: {action}",
         f"Title: {title or '(missing)'}",
         f"Start: {start or '(missing)'}",
         f"End: {end or '(not set)'}",

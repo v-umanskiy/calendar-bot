@@ -67,3 +67,16 @@ def test_find_event_draft_result_accepts_both_tool_names():
             {"name": gemini_tools.NEW_EVENT_DRAFT_TOOL_NAME, "result": replace_result},
         ]
     ) == replace_result
+
+
+def test_build_complete_draft_summary_for_new_event_action():
+    text = gemini_tools.build_complete_draft_summary(
+        {
+            "title": "Planning",
+            "start": "2026-02-25T09:00:00+03:00",
+            "end": "2026-02-25T10:00:00+03:00",
+        },
+        tool_name=gemini_tools.NEW_EVENT_DRAFT_TOOL_NAME,
+    )
+
+    assert "Action: Started a new draft event" in text
