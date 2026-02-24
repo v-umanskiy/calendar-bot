@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 import os
 from typing import Optional
 
@@ -16,6 +17,20 @@ from src.services import secret_service
 
 
 MAX_INVALID_REPAIR_ATTEMPTS = 2
+
+
+def _current_time_context_block() -> str:
+    now_local = datetime.now().astimezone()
+    current_time_iso = now_local.isoformat(timespec="seconds")
+    return (f"\ncurrent_datetime_rfc3339: {current_time_iso}\n")
+
+
+def _with_time_context(prompt: str) -> str:
+    base_prompt = (prompt or "").strip()
+    context_block = _current_time_context_block()
+    if base_prompt:
+        return f"{base_prompt}\n\n{context_block}"
+    return context_block
 
 
 class GeminiProvider(ModelProvider):
@@ -55,7 +70,7 @@ class GeminiProvider(ModelProvider):
         chat_id: Optional[str],
     ) -> str:
         self._log_call(prompt, raw_history)
-        contents = self._build_contents(gemini_history, [{"text": prompt}])
+        contents = self._build_contents(gemini_history, [{"text": _with_time_context(prompt)}])
         response, _ = await asyncio.to_thread(self._run_with_tools, contents, chat_id)
         return response
 
@@ -69,8 +84,7 @@ class GeminiProvider(ModelProvider):
         self._log_call(prompt, raw_history, is_photo=True)
         parts: list[dict] = []
         prompt_text = prompt or ""
-        if prompt_text:
-            parts.append({"text": prompt_text})
+        parts.append({"text": _with_time_context(prompt_text)})
         parts.append({
             "inline_data": {
                 "mime_type": "image/jpeg",
