@@ -6,12 +6,14 @@ from src.services import event_draft_table_service
 
 
 EVENT_DRAFT_TOOL_NAME = "upsert_event_draft"
+NEW_EVENT_DRAFT_TOOL_NAME = "create_new_event_draft"
 EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "You are a calendar assistant. "
     "If a user asks unrelated questions, briefly decline and redirect to calendar help. "
     "Short follow-ups inside an active draft flow are expected and should be interpreted in calendar context. "
-    "When the user wants to add, create, update, reschedule, or rename the current calendar event draft, "
+    "When the user wants to add, update, reschedule, or rename the current calendar event draft, "
     "you must call the upsert_event_draft function with any known fields. "
+    "When the user clearly starts a different/new event, call create_new_event_draft to replace the current draft. "
     "Use only these optional fields: start, end, title. "
     "Mandatory fields for a complete draft are title and start. "
     "For start/end, provide RFC3339 datetime with timezone offset (example: 2026-02-24T15:30:00+03:00). "
@@ -39,7 +41,22 @@ EVENT_DRAFT_TOOL_CONFIG = {
                             "title": {"type": "STRING"},
                         },
                     },
-                }
+                },
+                {
+                    "name": NEW_EVENT_DRAFT_TOOL_NAME,
+                    "description": (
+                        "Create a new event draft for the current chat by replacing the existing one. "
+                        "Call it when the user pivots to a different event."
+                    ),
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "start": {"type": "STRING"},
+                            "end": {"type": "STRING"},
+                            "title": {"type": "STRING"},
+                        },
+                    },
+                },
             ]
         }
     ],
@@ -60,7 +77,8 @@ def execute_function_calls(function_calls: list[dict], chat_id: Optional[str]) -
 
 
 def execute_tool_call(function_call: dict, chat_id: Optional[str]) -> dict:
-    if function_call["name"] != EVENT_DRAFT_TOOL_NAME:
+    function_name = function_call["name"]
+    if function_name not in {EVENT_DRAFT_TOOL_NAME, NEW_EVENT_DRAFT_TOOL_NAME}:
         return {"ok": False, "error": "unsupported_function"}
 
     if chat_id is None:
@@ -75,12 +93,25 @@ def execute_tool_call(function_call: dict, chat_id: Optional[str]) -> dict:
     title = args.get("title")
 
     try:
+        normalized_chat_id = int(chat_id) if str(chat_id).isdigit() else str(chat_id)
+        normalized_start = start if start is None else str(start)
+        normalized_end = end if end is None else str(end)
+        normalized_title = title if title is None else str(title)
+        if function_name == EVENT_DRAFT_TOOL_NAME:
+            return asyncio.run(
+                event_draft_table_service.upsert_event_draft(
+                    chat_id=normalized_chat_id,
+                    start=normalized_start,
+                    end=normalized_end,
+                    title=normalized_title,
+                )
+            )
         return asyncio.run(
-            event_draft_table_service.upsert_event_draft(
-                chat_id=int(chat_id) if str(chat_id).isdigit() else str(chat_id),
-                start=start if start is None else str(start),
-                end=end if end is None else str(end),
-                title=title if title is None else str(title),
+            event_draft_table_service.replace_event_draft(
+                chat_id=normalized_chat_id,
+                start=normalized_start,
+                end=normalized_end,
+                title=normalized_title,
             )
         )
     except Exception as exc:
@@ -88,9 +119,9 @@ def execute_tool_call(function_call: dict, chat_id: Optional[str]) -> dict:
         return {"ok": False, "error": "tool_execution_failed"}
 
 
-def find_upsert_result(function_results: list[dict]) -> Optional[dict]:
+def find_event_draft_result(function_results: list[dict]) -> Optional[dict]:
     for item in function_results:
-        if item.get("name") != EVENT_DRAFT_TOOL_NAME:
+        if item.get("name") not in {EVENT_DRAFT_TOOL_NAME, NEW_EVENT_DRAFT_TOOL_NAME}:
             continue
         result = item.get("result")
         if isinstance(result, dict):

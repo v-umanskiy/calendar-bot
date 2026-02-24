@@ -1,0 +1,69 @@
+from unittest.mock import AsyncMock
+
+from src.ai import gemini_tools
+
+
+def test_execute_tool_call_routes_to_upsert(monkeypatch):
+    upsert_mock = AsyncMock(return_value={"ok": True})
+    replace_mock = AsyncMock(return_value={"ok": True})
+    monkeypatch.setattr(gemini_tools.event_draft_table_service, "upsert_event_draft", upsert_mock)
+    monkeypatch.setattr(gemini_tools.event_draft_table_service, "replace_event_draft", replace_mock)
+
+    result = gemini_tools.execute_tool_call(
+        {
+            "name": gemini_tools.EVENT_DRAFT_TOOL_NAME,
+            "args": {"title": "Old", "start": "2026-02-24T10:00:00+03:00"},
+        },
+        "123",
+    )
+
+    assert result == {"ok": True}
+    upsert_mock.assert_awaited_once_with(
+        chat_id=123,
+        start="2026-02-24T10:00:00+03:00",
+        end=None,
+        title="Old",
+    )
+    replace_mock.assert_not_awaited()
+
+
+def test_execute_tool_call_routes_to_replace_for_new_event(monkeypatch):
+    upsert_mock = AsyncMock(return_value={"ok": True})
+    replace_mock = AsyncMock(return_value={"ok": True})
+    monkeypatch.setattr(gemini_tools.event_draft_table_service, "upsert_event_draft", upsert_mock)
+    monkeypatch.setattr(gemini_tools.event_draft_table_service, "replace_event_draft", replace_mock)
+
+    result = gemini_tools.execute_tool_call(
+        {
+            "name": gemini_tools.NEW_EVENT_DRAFT_TOOL_NAME,
+            "args": {"title": "New", "start": "2026-02-25T09:00:00+03:00"},
+        },
+        "chat-1",
+    )
+
+    assert result == {"ok": True}
+    replace_mock.assert_awaited_once_with(
+        chat_id="chat-1",
+        start="2026-02-25T09:00:00+03:00",
+        end=None,
+        title="New",
+    )
+    upsert_mock.assert_not_awaited()
+
+
+def test_find_event_draft_result_accepts_both_tool_names():
+    upsert_result = {"ok": True, "draft": {"title": "A"}}
+    replace_result = {"ok": True, "draft": {"title": "B"}}
+
+    assert gemini_tools.find_event_draft_result(
+        [
+            {"name": "other_tool", "result": {"ok": True}},
+            {"name": gemini_tools.EVENT_DRAFT_TOOL_NAME, "result": upsert_result},
+        ]
+    ) == upsert_result
+
+    assert gemini_tools.find_event_draft_result(
+        [
+            {"name": gemini_tools.NEW_EVENT_DRAFT_TOOL_NAME, "result": replace_result},
+        ]
+    ) == replace_result

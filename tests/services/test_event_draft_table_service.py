@@ -129,3 +129,58 @@ def test_upsert_event_draft_defaults_end_to_start_plus_one_hour(monkeypatch):
     )
     assert result["ok"] is True
     assert result["invalid_fields"] == []
+
+
+def test_replace_event_draft_defaults_end_to_start_plus_one_hour(monkeypatch):
+    replace_mock = AsyncMock(return_value={})
+    monkeypatch.setattr(
+        event_draft_table_service.event_draft_repository,
+        "replace_draft_item",
+        replace_mock,
+    )
+
+    result = asyncio.run(
+        event_draft_table_service.replace_event_draft(
+            chat_id=123,
+            start="2026-02-24T10:00:00+03:00",
+            title="Fresh event",
+        )
+    )
+
+    replace_mock.assert_awaited_once_with(
+        {
+            "chat_id": "123",
+            "start": "2026-02-24T10:00:00+03:00",
+            "end": "2026-02-24T11:00:00+03:00",
+            "title": "Fresh event",
+        }
+    )
+    assert result["ok"] is True
+    assert result["invalid_fields"] == []
+
+
+def test_replace_event_draft_skips_db_on_invalid_start(monkeypatch):
+    replace_mock = AsyncMock()
+    monkeypatch.setattr(
+        event_draft_table_service.event_draft_repository,
+        "replace_draft_item",
+        replace_mock,
+    )
+
+    result = asyncio.run(
+        event_draft_table_service.replace_event_draft(
+            chat_id=123,
+            start="next friday morning",
+            title="Fresh event",
+        )
+    )
+
+    assert result["ok"] is True
+    assert result["invalid_fields"] == [
+        {
+            "field": "start",
+            "reason": "invalid_rfc3339_with_offset",
+            "value": "next friday morning",
+        }
+    ]
+    replace_mock.assert_not_awaited()

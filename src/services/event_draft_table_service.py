@@ -14,6 +14,26 @@ def _is_blank(value) -> bool:
     return value is None or not str(value).strip()
 
 
+def _build_validation_result(
+    *,
+    title: str | None,
+    start: str | None,
+    end: str | None,
+    invalid_fields: list[dict],
+    missing_required: list[str] | None = None,
+) -> dict:
+    return {
+        "ok": True,
+        "draft": {
+            "title": title,
+            "start": start,
+            "end": end,
+        },
+        "missing_required": missing_required or [],
+        "invalid_fields": invalid_fields,
+    }
+
+
 def _parse_rfc3339_with_offset(value: str | None) -> datetime | None:
     if not value or not isinstance(value, str):
         return None
@@ -78,30 +98,26 @@ def _validate_draft(draft: dict) -> tuple[list[str], list[dict]]:
     return missing_required, invalid_fields
 
 
-async def upsert_event_draft(
-    chat_id: int,
-    start: str | None = None,
-    end: str | None = None,
-    title: str | None = None,
-):
+def _normalize_and_prevalidate_datetimes(
+    *,
+    title: str | None,
+    start: str | None,
+    end: str | None,
+) -> tuple[str | None, dict | None]:
     start_dt = _parse_rfc3339_with_offset(start) if _is_non_blank(start) else None
     if _is_non_blank(start) and start_dt is None:
-        return {
-            "ok": True,
-            "draft": {
-                "title": title,
-                "start": start,
-                "end": end,
-            },
-            "missing_required": [],
-            "invalid_fields": [
+        return end, _build_validation_result(
+            title=title,
+            start=start,
+            end=end,
+            invalid_fields=[
                 {
                     "field": "start",
                     "reason": "invalid_rfc3339_with_offset",
                     "value": str(start),
                 }
             ],
-        }
+        )
 
     normalized_end = end
     if start_dt is not None and _is_blank(end):
@@ -109,40 +125,49 @@ async def upsert_event_draft(
 
     end_dt = _parse_rfc3339_with_offset(normalized_end) if _is_non_blank(normalized_end) else None
     if _is_non_blank(normalized_end) and end_dt is None:
-        return {
-            "ok": True,
-            "draft": {
-                "title": title,
-                "start": start,
-                "end": normalized_end,
-            },
-            "missing_required": [],
-            "invalid_fields": [
+        return normalized_end, _build_validation_result(
+            title=title,
+            start=start,
+            end=normalized_end,
+            invalid_fields=[
                 {
                     "field": "end",
                     "reason": "invalid_rfc3339_with_offset",
                     "value": str(normalized_end),
                 }
             ],
-        }
+        )
 
     if start_dt is not None and end_dt is not None and end_dt <= start_dt:
-        return {
-            "ok": True,
-            "draft": {
-                "title": title,
-                "start": start,
-                "end": normalized_end,
-            },
-            "missing_required": [],
-            "invalid_fields": [
+        return normalized_end, _build_validation_result(
+            title=title,
+            start=start,
+            end=normalized_end,
+            invalid_fields=[
                 {
                     "field": "end",
                     "reason": "must_be_after_start",
                     "value": str(normalized_end),
                 }
             ],
-        }
+        )
+
+    return normalized_end, None
+
+
+async def upsert_event_draft(
+    chat_id: int,
+    start: str | None = None,
+    end: str | None = None,
+    title: str | None = None,
+):
+    normalized_end, prevalidation_result = _normalize_and_prevalidate_datetimes(
+        title=title,
+        start=start,
+        end=end,
+    )
+    if prevalidation_result is not None:
+        return prevalidation_result
 
     fields: dict = {}
 
@@ -189,17 +214,37 @@ async def replace_event_draft(
     end: str | None = None,
     title: str | None = None,
 ):
+    normalized_end, prevalidation_result = _normalize_and_prevalidate_datetimes(
+        title=title,
+        start=start,
+        end=end,
+    )
+    if prevalidation_result is not None:
+        return prevalidation_result
+
     item = {"chat_id": str(chat_id)}
 
     if start is not None:
         item["start"] = start
-    if end is not None:
-        item["end"] = end
+    if normalized_end is not None:
+        item["end"] = normalized_end
     if title is not None:
         item["title"] = title
 
     logging_utils.log_prefixed_message_full("Replacing event draft", item)
-    return await event_draft_repository.replace_draft_item(item)
+    await event_draft_repository.replace_draft_item(item)
+    draft = {
+        "title": item.get("title"),
+        "start": item.get("start"),
+        "end": item.get("end"),
+    }
+    missing_required, invalid_fields = _validate_draft(draft)
+    return {
+        "ok": True,
+        "draft": draft,
+        "missing_required": missing_required,
+        "invalid_fields": invalid_fields,
+    }
 
 
 async def delete_event_draft(chat_id: int):

@@ -132,20 +132,20 @@ class GeminiProvider(ModelProvider):
             return response.text or "No response", usage
 
         function_results = gemini_tools.execute_function_calls(function_calls, chat_id)
-        upsert_result = gemini_tools.find_upsert_result(function_results)
-        if upsert_result and upsert_result.get("ok"):
-            function_results, upsert_result = self._repair_invalid_result_if_needed(
+        event_draft_result = gemini_tools.find_event_draft_result(function_results)
+        if event_draft_result and event_draft_result.get("ok"):
+            function_results, event_draft_result = self._repair_invalid_result_if_needed(
                 contents,
                 chat_id,
                 function_results,
-                upsert_result,
+                event_draft_result,
             )
 
-        if upsert_result and upsert_result.get("ok"):
-            missing_required = upsert_result.get("missing_required") or []
-            invalid_fields = upsert_result.get("invalid_fields") or []
+        if event_draft_result and event_draft_result.get("ok"):
+            missing_required = event_draft_result.get("missing_required") or []
+            invalid_fields = event_draft_result.get("invalid_fields") or []
             if not missing_required and not invalid_fields:
-                return gemini_tools.build_complete_draft_summary(upsert_result.get("draft") or {}), usage
+                return gemini_tools.build_complete_draft_summary(event_draft_result.get("draft") or {}), usage
             if invalid_fields:
                 follow_up_response = self._client.models.generate_content(
                     model=self._model_name,
@@ -177,13 +177,13 @@ class GeminiProvider(ModelProvider):
         contents: list[dict],
         chat_id: Optional[str],
         function_results: list[dict],
-        upsert_result: dict,
+        event_draft_result: dict,
     ) -> tuple[list[dict], dict]:
         current_results = function_results
-        current_upsert_result = upsert_result
+        current_event_draft_result = event_draft_result
 
         for _ in range(MAX_INVALID_REPAIR_ATTEMPTS):
-            invalid_fields = current_upsert_result.get("invalid_fields") or []
+            invalid_fields = current_event_draft_result.get("invalid_fields") or []
             if not invalid_fields:
                 break
 
@@ -197,19 +197,19 @@ class GeminiProvider(ModelProvider):
                 break
 
             current_results = gemini_tools.execute_function_calls(repair_calls, chat_id)
-            next_upsert_result = gemini_tools.find_upsert_result(current_results)
-            if not next_upsert_result or not next_upsert_result.get("ok"):
+            next_event_draft_result = gemini_tools.find_event_draft_result(current_results)
+            if not next_event_draft_result or not next_event_draft_result.get("ok"):
                 break
-            current_upsert_result = next_upsert_result
+            current_event_draft_result = next_event_draft_result
 
-        return current_results, current_upsert_result
+        return current_results, current_event_draft_result
 
     @staticmethod
     def _build_invalid_repair_contents(contents: list[dict], function_results: list[dict]) -> list[dict]:
         repair_instruction = (
             "Tool call results indicate invalid_fields. This is your formatting/normalization failure.\n"
             f"Tool results JSON:\n{gemini_tools.tool_results_to_json(function_results)}\n\n"
-            "Try to correct invalid fields to RFC3339 with timezone offset and call upsert_event_draft again.\n"
+            "Try to correct invalid fields to RFC3339 with timezone offset and call the relevant event draft tool again.\n"
             "Only include corrected values for invalid fields.\n"
             "If you cannot confidently normalize from context, do not guess; ask the user a concise clarification question."
         )
