@@ -8,7 +8,10 @@ from src.services import s3_service
 from src.services import telegram_service
 from src.services import transcription_aws_service
 from src.services import transcription_table_service
-from .message_processor_simple import SimpleMessageProcessor
+from .message_processor_simple import (
+    handle_text_message as process_text_message,
+    handle_photo_message as process_photo_message,
+)
 from src.utils import logging_utils
 from src.utils.constants import (
     WELCOME_MESSAGE,
@@ -18,8 +21,6 @@ from src.utils.constants import (
     CLEAR_HISTORY_CONFIRM_CALLBACK_DATA,
     CLEAR_HISTORY_CANCEL_CALLBACK_DATA,
 )
-
-message_processor = SimpleMessageProcessor()
 
 
 async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool = False) -> str | None:
@@ -31,7 +32,7 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
     reply = None
     try:
         history = await history_table_service.load_model_history(chat_id)
-        reply = await message_processor.handle_text_message(chat_id, text, is_transcribed, history)
+        reply = await process_text_message(chat_id, text, is_transcribed, history)
     finally:
         indicator.cancel()
         try:
@@ -51,7 +52,7 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
 async def handle_photo_message(file_id: str, caption: str, chat_id: str) -> str | None:
     indicator = asyncio.create_task(_chat_action_indicator(chat_id, "typing"))
     try:
-        reply, file_url, file_key = await message_processor.handle_photo_message(file_id, caption, chat_id)
+        reply, file_url, file_key = await process_photo_message(file_id, caption, chat_id)
         await telegram_service.send_message(chat_id, reply)
         await history_table_service.save_turn(chat_id, "user", caption, file_url, file_key)
         await history_table_service.save_turn(chat_id, "assistant", reply)

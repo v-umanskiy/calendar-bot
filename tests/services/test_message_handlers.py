@@ -1,5 +1,4 @@
 import asyncio
-import types
 from unittest.mock import AsyncMock, call
 
 from tests.services import testing_helpers
@@ -28,17 +27,14 @@ def test_handle_text_message_regular_flow(monkeypatch):
     indicator_mock = AsyncMock()
     monkeypatch.setattr(message_handlers, "_chat_action_indicator", indicator_mock)
 
-    processor_mock = types.SimpleNamespace(
-        handle_text_message=AsyncMock(return_value=reply),
-        handle_photo_message=AsyncMock(),
-    )
-    monkeypatch.setattr(message_handlers, "message_processor", processor_mock)
+    process_text_mock = AsyncMock(return_value=reply)
+    monkeypatch.setattr(message_handlers, "process_text_message", process_text_mock)
 
     asyncio.run(message_handlers.handle_text_message(chat_id, text))
 
     handle_codes_mock.assert_awaited_once_with(chat_id, text)
     load_history_mock.assert_awaited_once_with(chat_id)
-    processor_mock.handle_text_message.assert_awaited_once_with(chat_id, text, False, history)
+    process_text_mock.assert_awaited_once_with(chat_id, text, False, history)
     send_message_mock.assert_awaited_once_with(chat_id, reply)
     assert save_turn_mock.await_args_list == [
         call(chat_id, "user", text),
@@ -66,16 +62,13 @@ def test_handle_text_message_returns_when_code_handled(monkeypatch):
     indicator_mock = AsyncMock()
     monkeypatch.setattr(message_handlers, "_chat_action_indicator", indicator_mock)
 
-    processor_mock = types.SimpleNamespace(
-        handle_text_message=AsyncMock(),
-        handle_photo_message=AsyncMock(),
-    )
-    monkeypatch.setattr(message_handlers, "message_processor", processor_mock)
+    process_text_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers, "process_text_message", process_text_mock)
 
     asyncio.run(message_handlers.handle_text_message(chat_id, text))
 
     handle_codes_mock.assert_awaited_once_with(chat_id, text)
-    processor_mock.handle_text_message.assert_not_awaited()
+    process_text_mock.assert_not_awaited()
     load_history_mock.assert_not_awaited()
     send_message_mock.assert_not_awaited()
     save_turn_mock.assert_not_awaited()
