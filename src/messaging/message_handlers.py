@@ -9,7 +9,6 @@ from src.services import telegram_service
 from src.services import transcription_aws_service
 from src.services import transcription_table_service
 from .message_processor_simple import SimpleMessageProcessor
-from .message_processor_rag import RagMessageProcessor
 from src.utils import logging_utils
 from src.utils.constants import (
     WELCOME_MESSAGE,
@@ -18,10 +17,9 @@ from src.utils.constants import (
     CLEAR_HISTORY_KEYBOARD,
     CLEAR_HISTORY_CONFIRM_CALLBACK_DATA,
     CLEAR_HISTORY_CANCEL_CALLBACK_DATA,
-    RAG_ENABLED,
 )
 
-message_processor = RagMessageProcessor() if RAG_ENABLED else SimpleMessageProcessor()
+message_processor = SimpleMessageProcessor()
 
 
 async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool = False) -> str | None:

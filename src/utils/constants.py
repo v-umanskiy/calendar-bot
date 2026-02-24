@@ -11,7 +11,6 @@ def _get_bool_env(var_name: str) -> bool:
 
 DOCUMENT_LANGUAGE = os.getenv("DOCUMENT_LANGUAGE", "English").strip() or "English"
 MESSAGE_CATEGORIZATION_ENABLED = _get_bool_env("ENABLE_MESSAGE_CATEGORIZATION")
-RAG_ENABLED = _get_bool_env("RAG_ENABLED")
 
 
 TRANSCRIBED_VOICE_PROMPT_TEMPLATE = (
@@ -116,59 +115,3 @@ CAPABILITIES_DOCUMENT = (
     "Google's own policies.\n"
     "The assistant cannot browse the internet, fetch live weather, or process arbitrary file attachments beyond photos and short audio notes."
 )
-
-
-EXTENSION_PROMPT = (
-    "You receive a message written by a user. Produce a single response that contains exactly three sentences in "
-    f"{DOCUMENT_LANGUAGE}.\n"
-    f"Step 1: Translate or restate the user's original sentence in {DOCUMENT_LANGUAGE} (if it already is, just repeat it using clear wording).\n"
-    f"Step 2: Write a longer {DOCUMENT_LANGUAGE} sentence that elaborates on the same intent, weaving in extra descriptive keywords and related context.\n"
-    "Example (English docs): user message 'Is there life on Mars?' → output 'Is there life on Mars? "
-    "Could human explorers, plants, or organisms endure the Martian climate and thin atmosphere?'\n"
-    "This way we extend keyword exposure for downstream analysis while keeping everything in the documentation language.\n"
-    "Return only the two sentences in one line of text, separated by spaces, with no extra commentary.\n"
-    "User's message: "
-)
-
-
-RAG_PROMPT = """
-You are a careful assistant working for a Telegram bot. Always answer in the same language as the user's latest question.
-Use the knowledge base provided inside <knowledge> tags as your primary source of truth. Follow these rules strictly:
-
-1. If the knowledge base contains the answer (even if it is in a different language), translate it if needed and respond
-   using ONLY that information. Mention nothing about general knowledge in this case.
-2. If the knowledge base explicitly lacks the answer but the question can be covered by general/common knowledge, tell the user
-   that the knowledge base has no answer and clearly label the part that comes from your common knowledge.
-   E.g. question: What are the most busy delivery months in Moscow?
-   E.g. answer: The knowledge base provided doesn't contain this info, but I can try to answer based on my experiences.
-   The most busy months are usually December and January, due to the celebration of the New Year's [...]
-3. If the question is domain-specific and missing from the knowledge base, say that the knowledge base does not contain the
-   requested information and stop there. Do NOT invent or extrapolate.
-
-Return only the final answer (no explanations of the rules above).
-
-User question:
-{question}
-
-<knowledge>
-{knowledge}
-</knowledge>
-"""
-
-
-ANSWER_NOT_FOUND_PROMPT = """
-We received a user's question we can't answer. We need to let the user know it, but in the user's
-language. If the question was in English, you should answer the following:
-I could not find an answer in my knowledge base. Please try to formulate a question differently.
-
-Otherwise you should answer the same thing, translated to the user's language.
-Answer directly, without any additional commentary.
-
-User's question:
-"""
-
-
-RAG_PHOTO_NOT_SUPPORTED_PROMPT = """
-I am using an internal knowledge base to answer (RAG). In this mode I can't process pictures.
-Please try a text or voice message.
-"""

@@ -8,4 +8,3 @@ mangum
 python-dotenv
 markdown
 bleach
-pinecone
