@@ -3,11 +3,8 @@ from src.services import history_table_service
 from src.services import s3_service
 from src.services import telegram_service
 from src.ai.model_provider import get_model_provider
-from src.utils import capabilities_utils
 from src.utils.constants import (
     TRANSCRIBED_VOICE_PROMPT_TEMPLATE,
-    CATEGORY_LIMITATION_REASONS,
-    MESSAGE_CATEGORIZATION_ENABLED,
 )
 
 model_provider = get_model_provider()
@@ -15,15 +12,6 @@ model_provider = get_model_provider()
 
 class SimpleMessageProcessor(MessageProcessor):
     async def handle_text_message(self, chat_id: str, text: str, is_transcribed: bool, history):
-        if MESSAGE_CATEGORIZATION_ENABLED:
-            category = await model_provider.classify_user_message(text)
-
-            if category in CATEGORY_LIMITATION_REASONS:
-                limitation_reason = CATEGORY_LIMITATION_REASONS[category]
-                prompt = capabilities_utils.build_capability_limitation_prompt(text, limitation_reason)
-                reply = await model_provider.generate_reply(prompt, chat_id=chat_id)
-                return reply
-
         prompt = text
         if is_transcribed:
             prompt = TRANSCRIBED_VOICE_PROMPT_TEMPLATE.format(message=text)

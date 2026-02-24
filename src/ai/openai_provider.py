@@ -7,10 +7,8 @@ from openai import OpenAI
 
 from src.utils import logging_utils
 from src.utils.constants import (
-    CLASSIFICATION_PROMPT_TEMPLATE,
     MODEL_PROVIDER_UNAVAILABLE_MESSAGE,
 )
-from src.utils.classifier_utils import parse_classifier_response
 from .model_provider import ModelProvider, ModelHistory
 from src.services import secret_service
 
@@ -60,7 +58,6 @@ class OpenAIProvider(ModelProvider):
         api_key = secret_service.get_secret("OPENAI_API_KEY")
         self._client = OpenAI(api_key=api_key)
         self._chat_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        self._classifier_model = os.getenv("OPENAI_CLASSIFIER_MODEL", self._chat_model)
 
     async def generate_reply(
         self,
@@ -124,23 +121,3 @@ class OpenAIProvider(ModelProvider):
             if value is not None:
                 usage_dict[key] = value
         return usage_dict or None
-
-    async def classify_user_message(self, message: str) -> str:
-        prompt = CLASSIFICATION_PROMPT_TEMPLATE + (message or "")
-        logging_utils.log_prefixed_fields(
-            "Calling OpenAI classifier.",
-            ("PROMPT", prompt),
-        )
-
-        payload = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
-        try:
-            response_text, _ = await asyncio.to_thread(self._send_completion, payload)
-        except Exception as exc:
-            print("OPENAI_CLASSIFY_CALL_ERROR:", repr(exc))
-            return "other"
-
-        logging_utils.log_prefixed_message(
-            "OpenAI classifier raw response",
-            response_text,
-        )
-        return parse_classifier_response(response_text)

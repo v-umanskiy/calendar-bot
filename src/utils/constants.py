@@ -1,18 +1,3 @@
-import os
-
-
-def _get_bool_env(var_name: str) -> bool:
-    value = os.getenv(var_name)
-    if value is None:
-        return False
-    normalized = value.strip().lower()
-    return normalized == "true"
-
-
-DOCUMENT_LANGUAGE = os.getenv("DOCUMENT_LANGUAGE", "English").strip() or "English"
-MESSAGE_CATEGORIZATION_ENABLED = _get_bool_env("ENABLE_MESSAGE_CATEGORIZATION")
-
-
 TRANSCRIBED_VOICE_PROMPT_TEMPLATE = (
     "You are continuing a chat with the user. "
     "The next message was transcribed from a voice note and may contain "
@@ -60,58 +45,3 @@ CLEAR_HISTORY_KEYBOARD = {
         [{"text": "Cancel", "callback_data": CLEAR_HISTORY_CANCEL_CALLBACK_DATA}],
     ]
 }
-
-
-CLASSIFIER_CATEGORIES = (
-    "image_generation_request",
-    "latest_news_request",
-    "other",
-)
-_CLASSIFIER_CATEGORY_LABELS = ", ".join(f'"{category}"' for category in CLASSIFIER_CATEGORIES)
-
-
-CLASSIFICATION_PROMPT_TEMPLATE = (
-    "You are classifying Telegram messages for a custom assistant bot. "
-    "Categorize the user's latest message into exactly one of these values: "
-    f"{_CLASSIFIER_CATEGORY_LABELS}. "
-    "Interpret 'image_generation_request' as the user asking for an image to be created or edited. "
-    "Interpret 'latest_news_request' as the user asking for live updates, current events, actual weather, "
-    "time or browsing the internet. Respond with a compact JSON object of the form {\"category\": \"value\"}. "
-    "Prefer 'other' if uncertain. Support any language, slang, and typos.\n\n"
-    "User message:\n"
-)
-
-
-LIMITATION_PROMPT_TEMPLATE = (
-    "You are a custom assistant for a Telegram bot, powered by Gemini. "
-    "The user's latest request is outside your capabilities because: {limitation}. "
-    "Using the capabilities document as your main source of truth, compose a concise "
-    "reply that explains the limitation, offers any helpful alternatives, and keeps a "
-    "friendly tone. Answer in the same language as the user when possible; otherwise, "
-    "respond in English.\n\n"
-    "Capabilities document (English):\n{document}\n\n"
-    "User message:\n{message}\n\n"
-)
-
-
-CATEGORY_LIMITATION_REASONS = {
-    "image_generation_request": (
-        "You can describe or brainstorm image ideas, but you cannot generate or edit "
-        "actual pictures because the assistant only produces text."
-    ),
-    "latest_news_request": (
-        "You lack live internet or browsing access."
-    ),
-}
-
-
-CAPABILITIES_DOCUMENT = (
-    "This assistant is powered by Google Gemini to help with everyday conversations.\n"
-    "It can explain topics, draft and translate text, and discuss the content of user-provided photos.\n"
-    "It can also respond to short voice notes. It can NOT generate or edit images. It can respond only in a text form.\n"
-    "Response to a text or a photo takes around 20 seconds, response to a voice note takes around 30 seconds.\n"
-    "User's messages and assistant's responses are being stored on the developer's servers. User can get them deleted using the bot's \n"
-    "menu in Telegram. They are also being forwarded to Google Gemini and being stored on Google's servers accordingly to \n"
-    "Google's own policies.\n"
-    "The assistant cannot browse the internet, fetch live weather, or process arbitrary file attachments beyond photos and short audio notes."
-)

@@ -16,11 +16,6 @@ class ModelProvider(ABC):
     ) -> str:
         raise NotImplementedError
 
-    @abstractmethod
-    async def classify_user_message(self, message: str) -> str:
-        raise NotImplementedError
-
-
 _provider: ModelProvider | None = None
 
 

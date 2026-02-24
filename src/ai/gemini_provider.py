@@ -6,9 +6,7 @@ from google.api_core import exceptions as google_api_exceptions
 from google import genai
 
 from src.utils import logging_utils
-from src.utils.classifier_utils import parse_classifier_response
 from src.utils.constants import (
-    CLASSIFICATION_PROMPT_TEMPLATE,
     MODEL_PROVIDER_LIMIT_REACHED_MESSAGE,
     MODEL_PROVIDER_UNAVAILABLE_MESSAGE,
 )
@@ -139,33 +137,6 @@ class GeminiProvider(ModelProvider):
         if total_tokens is not None:
             usage["total_tokens"] = total_tokens
         return usage or None
-
-    async def classify_user_message(self, message: str) -> str:
-        prompt = CLASSIFICATION_PROMPT_TEMPLATE + (message or "")
-        logging_utils.log_prefixed_fields(
-            "Calling Gemini classifier.",
-            ("PROMPT", prompt),
-        )
-
-        def _call_classifier() -> tuple[str, Optional[dict]]:
-            contents = self._build_contents([], [{"text": prompt}])
-            response = self._client.models.generate_content(
-                model=self._model_name,
-                contents=contents,
-            )
-            return response.text or "", self._extract_usage(response)
-
-        try:
-            raw_response, _ = await asyncio.to_thread(_call_classifier)
-        except Exception as exc:
-            print("GEMINI_CLASSIFY_CALL_ERROR:", repr(exc))
-            return "other"
-
-        logging_utils.log_prefixed_message(
-            "Gemini classifier raw response",
-            raw_response,
-        )
-        return parse_classifier_response(raw_response)
 
     def _build_contents(self, history: list[dict], parts: list[dict]) -> list[dict]:
         contents = list(history)
