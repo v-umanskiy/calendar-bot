@@ -15,7 +15,7 @@ from . import secret_service
 
 GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
-DEFAULT_GOOGLE_OAUTH_SCOPE = "https://www.googleapis.com/auth/calendar"
+DEFAULT_GOOGLE_OAUTH_SCOPE = "https://www.googleapis.com/auth/calendar.events"
 STATE_TTL_SECONDS = 600
 
 
