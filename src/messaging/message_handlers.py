@@ -8,6 +8,7 @@ from src.services import s3_service
 from src.services import telegram_service
 from src.services import transcription_aws_service
 from src.services import transcription_table_service
+from src.services import google_oauth_service
 from .message_processor_simple import (
     handle_text_message as process_text_message,
     handle_photo_message as process_photo_message,
@@ -17,6 +18,7 @@ from src.utils.constants import (
     WELCOME_MESSAGE,
     CLEAR_HISTORY_MESSAGE,
     HISTORY_CLEARED_MESSAGE,
+    GOOGLE_CONNECT_MESSAGE_TEMPLATE,
     CLEAR_HISTORY_KEYBOARD,
     CLEAR_HISTORY_CONFIRM_CALLBACK_DATA,
     CLEAR_HISTORY_CANCEL_CALLBACK_DATA,
@@ -122,6 +124,12 @@ async def _handle_message_codes(chat_id: str, text: str) -> str | None:
             CLEAR_HISTORY_KEYBOARD,
         )
         return CLEAR_HISTORY_MESSAGE
+    if stripped_text == "/connect":
+        url = google_oauth_service.build_oauth_connect_url(chat_id)
+        message = GOOGLE_CONNECT_MESSAGE_TEMPLATE.format(url=url)
+        logging_utils.log_prefixed_fields("GOOGLE_OAUTH_CONNECT_LINK_GENERATED", ("chat_id", chat_id))
+        await telegram_service.send_message(chat_id, message)
+        return message
     return None
 
 

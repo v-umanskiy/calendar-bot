@@ -34,6 +34,11 @@ CLEAR_HISTORY_MESSAGE = (
 
 HISTORY_CLEARED_MESSAGE = "Got it, the bot's history has been cleared."
 
+GOOGLE_CONNECT_MESSAGE_TEMPLATE = (
+    "Connect Google Calendar:\n{url}\n\n"
+    "After authorization, return to this chat."
+)
+
 
 CLEAR_HISTORY_CONFIRM_CALLBACK_DATA = "clear_history_confirm_yes"
 CLEAR_HISTORY_CANCEL_CALLBACK_DATA = "clear_history_confirm_cancel"

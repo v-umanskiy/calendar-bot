@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, call
 
 from tests.services import testing_helpers
 from src.messaging import message_handlers
-from src.utils.constants import WELCOME_MESSAGE
+from src.utils.constants import WELCOME_MESSAGE, GOOGLE_CONNECT_MESSAGE_TEMPLATE
 
 
 def test_handle_text_message_regular_flow(monkeypatch):
@@ -88,3 +88,20 @@ def test_handle_message_code_start(monkeypatch):
     asyncio.run(message_handlers.handle_text_message(chat_id, text))
     send_message_mock.assert_awaited_once_with(chat_id, WELCOME_MESSAGE)
     save_turn_mock.assert_not_awaited()
+
+
+def test_handle_message_code_connect(monkeypatch):
+    chat_id = "chat-789"
+    text = "/connect"
+    connect_url = "https://accounts.google.com/o/oauth2/v2/auth?x=1"
+
+    build_url_mock = lambda _chat_id: connect_url
+    monkeypatch.setattr(message_handlers.google_oauth_service, "build_oauth_connect_url", build_url_mock)
+
+    send_message_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+
+    asyncio.run(message_handlers.handle_text_message(chat_id, text))
+
+    expected = GOOGLE_CONNECT_MESSAGE_TEMPLATE.format(url=connect_url)
+    send_message_mock.assert_awaited_once_with(chat_id, expected)

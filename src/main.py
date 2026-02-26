@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Request, Header, HTTPException
+from fastapi.responses import HTMLResponse
 from mangum import Mangum
 import src.handlers.webhook_handler as webhook_handler
 import src.services.secret_service as secret_service
+from src.services import google_oauth_service
 
 app = FastAPI()
 handler = Mangum(app)
@@ -26,3 +28,17 @@ async def telegram_webhook(
     print("Incoming update:", data)
 
     return await webhook_handler.handle_telegram_webhook_data(data)
+
+
+@app.get("/oauth/callback", response_class=HTMLResponse)
+async def google_oauth_callback(
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+):
+    status_code, html = await google_oauth_service.process_oauth_callback(
+        code=code,
+        state=state,
+        error=error,
+    )
+    return HTMLResponse(content=html, status_code=status_code)
