@@ -10,17 +10,18 @@ TELEGRAM_FILE_URL = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}"
 async def send_message(chat_id: int, text: str):
     html_text = util.to_html(text)
     chunks = util.split_html_message(html_text)
-    await _send_message_chunks(chat_id, chunks)
+    return await _send_message_chunks(chat_id, chunks)
 
 
 async def send_message_with_reply_markup(chat_id: int, text: str, reply_markup: dict):
     html_text = util.to_html(text)
     chunks = [html_text]
-    await _send_message_chunks(chat_id, chunks, reply_markup)
+    return await _send_message_chunks(chat_id, chunks, reply_markup)
 
 
 async def _send_message_chunks(chat_id: int, chunks: list[str], reply_markup: dict | None = None):
     url = f"{TELEGRAM_API_URL}/sendMessage"
+    last_result = None
 
     async with httpx.AsyncClient(timeout=10) as client:
         for idx, chunk in enumerate(chunks):
@@ -37,10 +38,17 @@ async def _send_message_chunks(chat_id: int, chunks: list[str], reply_markup: di
                 response = await client.post(url, json=payload)
                 logging_utils.log_http_result("SEND_MESSAGE", response)
                 if not response.is_success:
-                    return
+                    return None
+                try:
+                    body = response.json()
+                    if isinstance(body, dict):
+                        last_result = body.get("result")
+                except Exception:
+                    last_result = None
             except Exception as e:
                 print("SEND_MESSAGE_ERROR:", repr(e))
-                return
+                return None
+    return last_result
 
 
 async def answer_callback_query(callback_query_id: str):

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 import uuid
 
@@ -10,6 +11,7 @@ from src.services import transcription_aws_service
 from src.services import transcription_table_service
 from src.services import google_oauth_service
 from src.services import google_calendar_service
+from src.services import google_event_links_table_service
 from .message_processor_simple import (
     handle_text_message as process_text_message,
     handle_photo_message as process_photo_message,
@@ -20,6 +22,13 @@ from src.utils.constants import (
     CLEAR_HISTORY_MESSAGE,
     HISTORY_CLEARED_MESSAGE,
     GOOGLE_CONNECT_MESSAGE_TEMPLATE,
+    EVENT_CREATED_REPLY_PREFIX,
+    EVENT_REMOVE_BUTTON_TEXT,
+    EVENT_REMOVE_CALLBACK_DATA,
+    EVENT_REMOVED_MESSAGE,
+    EVENT_NOT_FOUND_MESSAGE,
+    EVENT_REMOVE_FAILED_MESSAGE,
+    EVENT_RECONNECT_REQUIRED_MESSAGE,
     CLEAR_HISTORY_KEYBOARD,
     CLEAR_HISTORY_CONFIRM_CALLBACK_DATA,
     CLEAR_HISTORY_CANCEL_CALLBACK_DATA,
@@ -46,10 +55,32 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
     if reply is None:
         raise RuntimeError("Gemini reply missing; call_gemini returned None")
 
-    await telegram_service.send_message(chat_id, reply)
+    assistant_reply = reply
+    if isinstance(reply, str) and reply.startswith(EVENT_CREATED_REPLY_PREFIX):
+        payload = _parse_event_created_reply(reply)
+        if payload:
+            summary = str(payload.get("summary") or "")
+            reply_markup = {
+                "inline_keyboard": [
+                    [{"text": EVENT_REMOVE_BUTTON_TEXT, "callback_data": EVENT_REMOVE_CALLBACK_DATA}],
+                ]
+            }
+            sent = await telegram_service.send_message_with_reply_markup(chat_id, summary, reply_markup)
+            if isinstance(sent, dict) and sent.get("message_id") is not None:
+                await google_event_links_table_service.save_event_link(
+                    chat_id=chat_id,
+                    telegram_message_id=sent.get("message_id"),
+                    calendar_id=str(payload.get("calendar_id") or "primary"),
+                    google_event_id=str(payload.get("google_event_id") or ""),
+                )
+            assistant_reply = summary
+        else:
+            await telegram_service.send_message(chat_id, reply)
+    else:
+        await telegram_service.send_message(chat_id, reply)
     await history_table_service.save_turn(chat_id, "user", text)
-    await history_table_service.save_turn(chat_id, "assistant", reply)
-    return reply
+    await history_table_service.save_turn(chat_id, "assistant", assistant_reply)
+    return assistant_reply
 
 
 async def handle_photo_message(file_id: str, caption: str, chat_id: str) -> str | None:
@@ -151,7 +182,32 @@ async def handle_callback_query(callback_query: dict):
 
     data = callback_query.get("data")
     message = callback_query.get("message")
-    if not message or data not in {
+    if not message:
+        return
+    if data == EVENT_REMOVE_CALLBACK_DATA:
+        chat_id = message["chat"]["id"]
+        message_id = message["message_id"]
+        link = await google_event_links_table_service.get_event_link(chat_id, message_id)
+        if not isinstance(link, dict):
+            await telegram_service.send_message(chat_id, EVENT_NOT_FOUND_MESSAGE)
+            return
+        delete_result = await google_calendar_service.delete_event(
+            str(chat_id),
+            calendar_id=str(link.get("calendar_id") or "primary"),
+            google_event_id=str(link.get("google_event_id") or ""),
+        )
+        if delete_result.get("ok") or delete_result.get("error") == "not_found":
+            await google_event_links_table_service.delete_event_link(chat_id, message_id)
+            await telegram_service.clear_message_reply_markup(chat_id, message_id)
+            await telegram_service.send_message(chat_id, EVENT_REMOVED_MESSAGE)
+            return
+        if delete_result.get("error") in {"reconnect_required", "not_connected", "missing_access_token"}:
+            await telegram_service.send_message(chat_id, EVENT_RECONNECT_REQUIRED_MESSAGE)
+            return
+        await telegram_service.send_message(chat_id, EVENT_REMOVE_FAILED_MESSAGE)
+        return
+
+    if data not in {
         CLEAR_HISTORY_CONFIRM_CALLBACK_DATA,
         CLEAR_HISTORY_CANCEL_CALLBACK_DATA,
     }:
@@ -184,3 +240,18 @@ async def handle_callback_query(callback_query: dict):
             ("chat_id", chat_id),
             ("ms", int((time.monotonic() - send_start) * 1000)),
         )
+
+
+def _parse_event_created_reply(reply: str) -> dict | None:
+    if not reply.startswith(EVENT_CREATED_REPLY_PREFIX):
+        return None
+    raw = reply[len(EVENT_CREATED_REPLY_PREFIX):]
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if not payload.get("summary") or not payload.get("google_event_id"):
+        return None
+    return payload

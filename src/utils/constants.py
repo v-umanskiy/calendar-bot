@@ -38,6 +38,27 @@ GOOGLE_CONNECT_MESSAGE_TEMPLATE = (
     "Connect Google Calendar:\n{url}\n\n"
     "After authorization, return to this chat."
 )
+EVENT_SAVE_SUCCESS_MESSAGE_TEMPLATE = (
+    "Saved to Google Calendar.\n"
+    "Title: {title}\n"
+    "Start: {start}\n"
+    "End: {end}"
+)
+EVENT_SAVE_FAILED_MESSAGE = "Could not save the event right now."
+EVENT_SAVE_MISSING_DRAFT_MESSAGE = "No active draft to save yet."
+EVENT_SAVE_MISSING_FIELDS_MESSAGE_TEMPLATE = (
+    "Cannot save yet. Missing required fields: {fields}."
+)
+EVENT_SAVE_INVALID_FIELDS_MESSAGE_TEMPLATE = (
+    "Cannot save yet. Invalid fields: {fields}."
+)
+EVENT_REMOVE_BUTTON_TEXT = "Remove"
+EVENT_REMOVE_CALLBACK_DATA = "evdel"
+EVENT_REMOVED_MESSAGE = "Event removed."
+EVENT_NOT_FOUND_MESSAGE = "Event not found, probably it was already removed."
+EVENT_REMOVE_FAILED_MESSAGE = "Could not remove the event right now."
+EVENT_RECONNECT_REQUIRED_MESSAGE = "Google Calendar authorization expired. Use /connect to reconnect."
+EVENT_CREATED_REPLY_PREFIX = "__EVENT_CREATED__:"
 
 
 CLEAR_HISTORY_CONFIRM_CALLBACK_DATA = "clear_history_confirm_yes"

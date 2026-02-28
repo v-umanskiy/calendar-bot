@@ -3,6 +3,7 @@ import json
 from typing import Optional
 
 from src.services import event_draft_table_service
+from src.utils.constants import EVENT_CREATED_REPLY_PREFIX
 
 
 EVENT_DRAFT_TOOL_NAME = "upsert_event_draft"
@@ -152,6 +153,15 @@ def build_complete_draft_summary(draft: dict, tool_name: Optional[str] = None) -
         f"End: {end or '(not set)'}",
     ]
     return "\n".join(lines)
+
+
+def build_event_created_reply(summary: str, calendar_id: str, google_event_id: str) -> str:
+    payload = {
+        "summary": summary,
+        "calendar_id": calendar_id,
+        "google_event_id": google_event_id,
+    }
+    return f"{EVENT_CREATED_REPLY_PREFIX}{json.dumps(payload, ensure_ascii=True)}"
 
 
 def extract_response_content(response):

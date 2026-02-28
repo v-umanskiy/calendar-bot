@@ -10,10 +10,14 @@ from src.utils import logging_utils
 from src.utils.constants import (
     MODEL_PROVIDER_LIMIT_REACHED_MESSAGE,
     MODEL_PROVIDER_UNAVAILABLE_MESSAGE,
+    EVENT_SAVE_SUCCESS_MESSAGE_TEMPLATE,
+    EVENT_SAVE_FAILED_MESSAGE,
+    EVENT_RECONNECT_REQUIRED_MESSAGE,
 )
 from .model_provider import ModelProvider, ModelHistory
 from . import gemini_tools
 from src.services import secret_service
+from src.services import google_calendar_service
 
 
 MAX_INVALID_REPAIR_ATTEMPTS = 2
@@ -149,9 +153,30 @@ class GeminiProvider(ModelProvider):
             missing_required = event_draft_result.get("missing_required") or []
             invalid_fields = event_draft_result.get("invalid_fields") or []
             if not missing_required and not invalid_fields:
-                return gemini_tools.build_complete_draft_summary(
-                    event_draft_result.get("draft") or {},
-                    tool_name=event_draft_tool_name,
+                draft = event_draft_result.get("draft") or {}
+                if chat_id is None:
+                    return MODEL_PROVIDER_UNAVAILABLE_MESSAGE, usage
+                create_result = asyncio.run(
+                    google_calendar_service.create_primary_event(
+                        str(chat_id),
+                        title=str(draft.get("title") or ""),
+                        start=str(draft.get("start") or ""),
+                        end=str(draft.get("end") or ""),
+                    )
+                )
+                if not create_result.get("ok"):
+                    if create_result.get("error") in {"reconnect_required", "not_connected", "missing_access_token"}:
+                        return EVENT_RECONNECT_REQUIRED_MESSAGE, usage
+                    return EVENT_SAVE_FAILED_MESSAGE, usage
+                summary = EVENT_SAVE_SUCCESS_MESSAGE_TEMPLATE.format(
+                    title=str(draft.get("title") or ""),
+                    start=str(draft.get("start") or ""),
+                    end=str(draft.get("end") or ""),
+                )
+                return gemini_tools.build_event_created_reply(
+                    summary,
+                    str(create_result.get("calendar_id") or "primary"),
+                    str(create_result.get("google_event_id") or ""),
                 ), usage
             if invalid_fields:
                 follow_up_response = self._client.models.generate_content(
