@@ -11,6 +11,7 @@ import httpx
 
 from src.utils import logging_utils
 from . import secret_service
+from . import google_oauth_token_service
 
 
 GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -178,6 +179,16 @@ async def process_oauth_callback(
         )
         return 502, "<h3>Google Calendar connection failed</h3><p>Token exchange failed. Please try /connect again.</p>"
 
+    persist_result = await google_oauth_token_service.persist_oauth_tokens(str(chat_id), result)
+    if not persist_result.get("ok"):
+        logging_utils.log_prefixed_fields(
+            "GOOGLE_OAUTH_TOKEN_PERSIST_ERROR",
+            ("correlation_id", correlation_id),
+            ("chat_id", chat_id),
+            ("error", persist_result.get("error")),
+        )
+        return 500, "<h3>Google Calendar connection failed</h3><p>Could not store tokens. Please try /connect again.</p>"
+
     logging_utils.log_prefixed_fields(
         "GOOGLE_OAUTH_TOKEN_EXCHANGE_SUCCESS",
         ("correlation_id", correlation_id),
@@ -185,5 +196,7 @@ async def process_oauth_callback(
         ("scope", result.get("scope")),
         ("token_type", result.get("token_type")),
         ("expires_in", result.get("expires_in")),
+        ("has_refresh_token", persist_result.get("has_refresh_token")),
+        ("refresh_token_reused", persist_result.get("refresh_token_reused")),
     )
     return 200, "<h3>Google Calendar connected</h3><p>You can return to Telegram.</p>"

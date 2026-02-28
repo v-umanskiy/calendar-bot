@@ -26,9 +26,16 @@ class _DummyS3Client:
                     "GEMINI_API_KEY": "dummy",
                     "TELEGRAM_BOT_TOKEN": "dummy",
                     "WEBHOOK_SECRET": "dummy",
+                    "GOOGLE_CLIENT_ID": "dummy",
+                    "GOOGLE_CLIENT_SECRET": "dummy",
+                    "GOOGLE_OAUTH_REDIRECT_URI": "https://example.com/oauth/callback",
+                    "GOOGLE_OAUTH_STATE_SECRET": "dummy-state-secret",
                 }
             )
         }
+
+    def encrypt(self, **_kwargs):
+        return {"CiphertextBlob": b"encrypted"}
 
 
 class _DummyBatchWriter:
@@ -45,6 +52,9 @@ class _DummyBatchWriter:
 class _DummyTable:
     def put_item(self, Item):
         pass
+
+    def get_item(self, **_kwargs):
+        return {}
 
     def query(self, **_kwargs):
         return {"Items": []}
