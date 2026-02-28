@@ -34,11 +34,17 @@ def _build_validation_result(
     }
 
 
-def _parse_rfc3339_with_offset(value: str | None) -> datetime | None:
+def _get_server_tzinfo():
+    return datetime.now().astimezone().tzinfo
+
+
+def _parse_rfc3339_datetime(value: str | None) -> datetime | None:
     if not value or not isinstance(value, str):
         return None
     normalized = value.strip()
     if not normalized:
+        return None
+    if "T" not in normalized:
         return None
     if normalized.endswith("Z"):
         normalized = normalized[:-1] + "+00:00"
@@ -46,9 +52,21 @@ def _parse_rfc3339_with_offset(value: str | None) -> datetime | None:
         parsed = datetime.fromisoformat(normalized)
     except ValueError:
         return None
-    if parsed.tzinfo is None:
-        return None
     return parsed
+
+
+def _normalize_to_server_timezone_iso(value: str | None) -> str | None:
+    parsed = _parse_rfc3339_datetime(value)
+    if parsed is None:
+        return None
+    server_tz = _get_server_tzinfo()
+    if server_tz is None:
+        return None
+    if parsed.tzinfo is None:
+        normalized = parsed.replace(tzinfo=server_tz)
+    else:
+        normalized = parsed.astimezone(server_tz)
+    return normalized.isoformat(timespec="seconds")
 
 
 def _validate_draft(draft: dict) -> tuple[list[str], list[dict]]:
@@ -66,22 +84,22 @@ def _validate_draft(draft: dict) -> tuple[list[str], list[dict]]:
     start_dt = None
     end_dt = None
     if _is_non_blank(start_value):
-        start_dt = _parse_rfc3339_with_offset(str(start_value))
+        start_dt = _parse_rfc3339_datetime(str(start_value))
         if start_dt is None:
             invalid_fields.append(
                 {
                     "field": "start",
-                    "reason": "invalid_rfc3339_with_offset",
+                    "reason": "invalid_rfc3339",
                     "value": str(start_value),
                 }
             )
     if _is_non_blank(end_value):
-        end_dt = _parse_rfc3339_with_offset(str(end_value))
+        end_dt = _parse_rfc3339_datetime(str(end_value))
         if end_dt is None:
             invalid_fields.append(
                 {
                     "field": "end",
-                    "reason": "invalid_rfc3339_with_offset",
+                    "reason": "invalid_rfc3339",
                     "value": str(end_value),
                 }
             )
@@ -103,45 +121,64 @@ def _normalize_and_prevalidate_datetimes(
     title: str | None,
     start: str | None,
     end: str | None,
-) -> tuple[str | None, dict | None]:
-    start_dt = _parse_rfc3339_with_offset(start) if _is_non_blank(start) else None
+) -> tuple[str | None, str | None, dict | None]:
+    normalized_start = start
+    start_dt = None
+    if _is_non_blank(start):
+        normalized_start = _normalize_to_server_timezone_iso(start)
+        start_dt = _parse_rfc3339_datetime(normalized_start)
     if _is_non_blank(start) and start_dt is None:
-        return end, _build_validation_result(
+        return normalized_start, end, _build_validation_result(
             title=title,
-            start=start,
+            start=normalized_start,
             end=end,
             invalid_fields=[
                 {
                     "field": "start",
-                    "reason": "invalid_rfc3339_with_offset",
+                    "reason": "invalid_rfc3339",
                     "value": str(start),
                 }
             ],
         )
 
     normalized_end = end
-    if start_dt is not None and _is_blank(end):
+    if _is_non_blank(end):
+        normalized_end = _normalize_to_server_timezone_iso(end)
+        if normalized_end is None:
+            return normalized_start, normalized_end, _build_validation_result(
+                title=title,
+                start=normalized_start,
+                end=normalized_end,
+                invalid_fields=[
+                    {
+                        "field": "end",
+                        "reason": "invalid_rfc3339",
+                        "value": str(end),
+                    }
+                ],
+            )
+    elif start_dt is not None and _is_blank(end):
         normalized_end = (start_dt + timedelta(hours=1)).isoformat(timespec="seconds")
 
-    end_dt = _parse_rfc3339_with_offset(normalized_end) if _is_non_blank(normalized_end) else None
+    end_dt = _parse_rfc3339_datetime(normalized_end) if _is_non_blank(normalized_end) else None
     if _is_non_blank(normalized_end) and end_dt is None:
-        return normalized_end, _build_validation_result(
+        return normalized_start, normalized_end, _build_validation_result(
             title=title,
-            start=start,
+            start=normalized_start,
             end=normalized_end,
             invalid_fields=[
                 {
                     "field": "end",
-                    "reason": "invalid_rfc3339_with_offset",
+                    "reason": "invalid_rfc3339",
                     "value": str(normalized_end),
                 }
             ],
         )
 
     if start_dt is not None and end_dt is not None and end_dt <= start_dt:
-        return normalized_end, _build_validation_result(
+        return normalized_start, normalized_end, _build_validation_result(
             title=title,
-            start=start,
+            start=normalized_start,
             end=normalized_end,
             invalid_fields=[
                 {
@@ -152,7 +189,7 @@ def _normalize_and_prevalidate_datetimes(
             ],
         )
 
-    return normalized_end, None
+    return normalized_start, normalized_end, None
 
 
 async def upsert_event_draft(
@@ -161,7 +198,7 @@ async def upsert_event_draft(
     end: str | None = None,
     title: str | None = None,
 ):
-    normalized_end, prevalidation_result = _normalize_and_prevalidate_datetimes(
+    normalized_start, normalized_end, prevalidation_result = _normalize_and_prevalidate_datetimes(
         title=title,
         start=start,
         end=end,
@@ -172,7 +209,7 @@ async def upsert_event_draft(
     fields: dict = {}
 
     if start is not None:
-        fields["start"] = start
+        fields["start"] = normalized_start
     if normalized_end is not None:
         fields["end"] = normalized_end
     if title is not None:
@@ -214,7 +251,7 @@ async def replace_event_draft(
     end: str | None = None,
     title: str | None = None,
 ):
-    normalized_end, prevalidation_result = _normalize_and_prevalidate_datetimes(
+    normalized_start, normalized_end, prevalidation_result = _normalize_and_prevalidate_datetimes(
         title=title,
         start=start,
         end=end,
@@ -225,7 +262,7 @@ async def replace_event_draft(
     item = {"chat_id": str(chat_id)}
 
     if start is not None:
-        item["start"] = start
+        item["start"] = normalized_start
     if normalized_end is not None:
         item["end"] = normalized_end
     if title is not None:

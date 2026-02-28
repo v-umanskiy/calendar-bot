@@ -1,10 +1,20 @@
 import asyncio
+from datetime import timedelta, timezone
 from unittest.mock import AsyncMock
 
 from src.services import event_draft_table_service
 
 
+def _set_server_tz(monkeypatch, hours: int):
+    monkeypatch.setattr(
+        event_draft_table_service,
+        "_get_server_tzinfo",
+        lambda: timezone(timedelta(hours=hours)),
+    )
+
+
 def test_upsert_event_draft_skips_db_on_invalid_start(monkeypatch):
+    _set_server_tz(monkeypatch, 3)
     upsert_mock = AsyncMock()
     monkeypatch.setattr(
         event_draft_table_service.event_draft_repository,
@@ -24,7 +34,7 @@ def test_upsert_event_draft_skips_db_on_invalid_start(monkeypatch):
     assert result["invalid_fields"] == [
         {
             "field": "start",
-            "reason": "invalid_rfc3339_with_offset",
+            "reason": "invalid_rfc3339",
             "value": "tomorrow evening",
         }
     ]
@@ -32,6 +42,7 @@ def test_upsert_event_draft_skips_db_on_invalid_start(monkeypatch):
 
 
 def test_upsert_event_draft_persists_blank_start_and_reports_missing_after_save(monkeypatch):
+    _set_server_tz(monkeypatch, 3)
     upsert_mock = AsyncMock(
         return_value={
             "Attributes": {
@@ -68,6 +79,7 @@ def test_upsert_event_draft_persists_blank_start_and_reports_missing_after_save(
 
 
 def test_upsert_event_draft_skips_db_on_invalid_end(monkeypatch):
+    _set_server_tz(monkeypatch, 3)
     upsert_mock = AsyncMock()
     monkeypatch.setattr(
         event_draft_table_service.event_draft_repository,
@@ -88,7 +100,7 @@ def test_upsert_event_draft_skips_db_on_invalid_end(monkeypatch):
     assert result["invalid_fields"] == [
         {
             "field": "end",
-            "reason": "invalid_rfc3339_with_offset",
+            "reason": "invalid_rfc3339",
             "value": "bad-value",
         }
     ]
@@ -96,6 +108,7 @@ def test_upsert_event_draft_skips_db_on_invalid_end(monkeypatch):
 
 
 def test_upsert_event_draft_defaults_end_to_start_plus_one_hour(monkeypatch):
+    _set_server_tz(monkeypatch, 3)
     upsert_mock = AsyncMock(
         return_value={
             "Attributes": {
@@ -132,6 +145,7 @@ def test_upsert_event_draft_defaults_end_to_start_plus_one_hour(monkeypatch):
 
 
 def test_replace_event_draft_defaults_end_to_start_plus_one_hour(monkeypatch):
+    _set_server_tz(monkeypatch, 3)
     replace_mock = AsyncMock(return_value={})
     monkeypatch.setattr(
         event_draft_table_service.event_draft_repository,
@@ -160,6 +174,7 @@ def test_replace_event_draft_defaults_end_to_start_plus_one_hour(monkeypatch):
 
 
 def test_replace_event_draft_skips_db_on_invalid_start(monkeypatch):
+    _set_server_tz(monkeypatch, 3)
     replace_mock = AsyncMock()
     monkeypatch.setattr(
         event_draft_table_service.event_draft_repository,
@@ -179,8 +194,44 @@ def test_replace_event_draft_skips_db_on_invalid_start(monkeypatch):
     assert result["invalid_fields"] == [
         {
             "field": "start",
-            "reason": "invalid_rfc3339_with_offset",
+            "reason": "invalid_rfc3339",
             "value": "next friday morning",
         }
     ]
     replace_mock.assert_not_awaited()
+
+
+def test_upsert_event_draft_normalizes_offsetless_datetime_to_server_timezone(monkeypatch):
+    _set_server_tz(monkeypatch, 3)
+    upsert_mock = AsyncMock(
+        return_value={
+            "Attributes": {
+                "title": "Therms",
+                "start": "2026-03-05T17:00:00+03:00",
+                "end": "2026-03-05T18:00:00+03:00",
+            }
+        }
+    )
+    monkeypatch.setattr(
+        event_draft_table_service.event_draft_repository,
+        "upsert_draft_fields",
+        upsert_mock,
+    )
+
+    result = asyncio.run(
+        event_draft_table_service.upsert_event_draft(
+            chat_id=123,
+            start="2026-03-05T17:00:00",
+            title="Therms",
+        )
+    )
+
+    upsert_mock.assert_awaited_once_with(
+        "123",
+        {
+            "start": "2026-03-05T17:00:00+03:00",
+            "end": "2026-03-05T18:00:00+03:00",
+            "title": "Therms",
+        },
+    )
+    assert result["ok"] is True

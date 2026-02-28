@@ -25,8 +25,8 @@ MAX_INVALID_REPAIR_ATTEMPTS = 2
 
 def _current_time_context_block() -> str:
     now_local = datetime.now().astimezone()
-    current_time_iso = now_local.isoformat(timespec="seconds")
-    return (f"\ncurrent_datetime_rfc3339: {current_time_iso}\n")
+    current_time_iso = now_local.replace(tzinfo=None).isoformat(timespec="seconds")
+    return (f"\ncurrent_datetime_rfc3339_local: {current_time_iso}\n")
 
 
 def _with_time_context(prompt: str) -> str:
@@ -244,7 +244,7 @@ class GeminiProvider(ModelProvider):
         repair_instruction = (
             "Tool call results indicate invalid_fields. This is your formatting/normalization failure.\n"
             f"Tool results JSON:\n{gemini_tools.tool_results_to_json(function_results)}\n\n"
-            "Try to correct invalid fields to RFC3339 with timezone offset and call the relevant event draft tool again.\n"
+            "Try to correct invalid fields to RFC3339 datetime and call the relevant event draft tool again.\n"
             "Only include corrected values for invalid fields.\n"
             "If you cannot confidently normalize from context, do not guess; ask the user a concise clarification question."
         )
@@ -271,7 +271,7 @@ class GeminiProvider(ModelProvider):
             "Tool calls were executed. Use this JSON result to continue the conversation:\n"
             f"{gemini_tools.tool_results_to_json(function_results)}\n\n"
             "invalid_fields are still present after normalization attempts.\n"
-            "Ask a neutral clarification question for explicit date/time with timezone.\n"
+            "Ask a neutral clarification question for explicit date/time.\n"
             "Do not blame the user and do not mention internal tools.\n"
             "Be concise and ask only one focused follow-up question."
         )
