@@ -142,6 +142,11 @@ async def get_valid_access_token(chat_id: str, *, force_refresh: bool = False) -
         return {"ok": False, "error": "reconnect_required"}
 
     refresh_token = await _decrypt_value(str(refresh_token_enc), chat_id)
+    logging_utils.log_prefixed_fields(
+        "GOOGLE_OAUTH_REFRESH_ATTEMPT",
+        ("chat_id", chat_id),
+        ("reason", "forced_after_401" if force_refresh else "expired_or_expiring"),
+    )
     ok, refreshed_payload = await _refresh_access_token(chat_id, refresh_token)
     if not ok:
         logging_utils.log_prefixed_fields(
@@ -158,4 +163,11 @@ async def get_valid_access_token(chat_id: str, *, force_refresh: bool = False) -
     access_token = refreshed_payload.get("access_token")
     if not access_token:
         return {"ok": False, "error": "missing_access_token"}
+    logging_utils.log_prefixed_fields(
+        "GOOGLE_OAUTH_REFRESH_SUCCESS",
+        ("chat_id", chat_id),
+        ("expires_in", refreshed_payload.get("expires_in")),
+        ("token_type", refreshed_payload.get("token_type")),
+        ("refresh_token_reused", persist_result.get("refresh_token_reused")),
+    )
     return {"ok": True, "access_token": str(access_token)}
