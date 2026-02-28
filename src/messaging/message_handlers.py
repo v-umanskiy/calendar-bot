@@ -9,6 +9,7 @@ from src.services import telegram_service
 from src.services import transcription_aws_service
 from src.services import transcription_table_service
 from src.services import google_oauth_service
+from src.services import google_calendar_service
 from .message_processor_simple import (
     handle_text_message as process_text_message,
     handle_photo_message as process_photo_message,
@@ -128,6 +129,10 @@ async def _handle_message_codes(chat_id: str, text: str) -> str | None:
         url = google_oauth_service.build_oauth_connect_url(chat_id)
         message = GOOGLE_CONNECT_MESSAGE_TEMPLATE.format(url=url)
         logging_utils.log_prefixed_fields("GOOGLE_OAUTH_CONNECT_LINK_GENERATED", ("chat_id", chat_id))
+        await telegram_service.send_message(chat_id, message)
+        return message
+    if stripped_text == "/events":
+        message = await google_calendar_service.list_primary_events_for_date(chat_id)
         await telegram_service.send_message(chat_id, message)
         return message
     return None

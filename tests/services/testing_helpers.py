@@ -37,6 +37,9 @@ class _DummyS3Client:
     def encrypt(self, **_kwargs):
         return {"CiphertextBlob": b"encrypted"}
 
+    def decrypt(self, **_kwargs):
+        return {"Plaintext": b"decrypted"}
+
 
 class _DummyBatchWriter:
     def __enter__(self):

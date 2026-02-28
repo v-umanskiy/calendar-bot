@@ -105,3 +105,20 @@ def test_handle_message_code_connect(monkeypatch):
 
     expected = GOOGLE_CONNECT_MESSAGE_TEMPLATE.format(url=connect_url)
     send_message_mock.assert_awaited_once_with(chat_id, expected)
+
+
+def test_handle_message_code_events(monkeypatch):
+    chat_id = "chat-999"
+    text = "/events"
+    events_reply = "Events for 2026-03-10 (UTC):\n- 10:00 Standup"
+
+    list_events_mock = AsyncMock(return_value=events_reply)
+    monkeypatch.setattr(message_handlers.google_calendar_service, "list_primary_events_for_date", list_events_mock)
+
+    send_message_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+
+    asyncio.run(message_handlers.handle_text_message(chat_id, text))
+
+    list_events_mock.assert_awaited_once_with(chat_id)
+    send_message_mock.assert_awaited_once_with(chat_id, events_reply)

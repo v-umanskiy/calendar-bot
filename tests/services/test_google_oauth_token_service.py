@@ -40,7 +40,7 @@ def test_persist_oauth_tokens_saves_new_refresh_token(monkeypatch):
     assert result["ok"] is True
     assert result["has_refresh_token"] is True
     assert result["refresh_token_reused"] is False
-    get_connection_mock.assert_not_awaited()
+    get_connection_mock.assert_awaited_once_with("123")
     put_connection_mock.assert_awaited_once()
     saved = put_connection_mock.await_args.args[0]
     assert saved["access_token_enc"] == "enc_access"
@@ -87,3 +87,56 @@ def test_persist_oauth_tokens_reuses_existing_refresh_token(monkeypatch):
     saved = put_connection_mock.await_args.args[0]
     assert saved["access_token_enc"] == "enc_access_new"
     assert saved["refresh_token_enc"] == "enc_old_refresh"
+
+
+def test_get_valid_access_token_refreshes_when_expired(monkeypatch):
+    get_connection_mock = AsyncMock(
+        return_value={
+            "chat_id": "123",
+            "access_token_enc": "enc_old_access",
+            "refresh_token_enc": "enc_refresh",
+            "expires_in": 1,
+            "updated_at": 0,
+        }
+    )
+    persist_mock = AsyncMock(return_value={"ok": True})
+    refresh_mock = AsyncMock(return_value=(True, {"access_token": "new_access", "expires_in": 3600, "token_type": "Bearer"}))
+
+    monkeypatch.setattr(
+        google_oauth_token_service.google_oauth_repository,
+        "get_connection",
+        get_connection_mock,
+    )
+    monkeypatch.setattr(
+        google_oauth_token_service,
+        "_decrypt_value",
+        AsyncMock(return_value="refresh_plain"),
+    )
+    monkeypatch.setattr(google_oauth_token_service, "_refresh_access_token", refresh_mock)
+    monkeypatch.setattr(google_oauth_token_service, "persist_oauth_tokens", persist_mock)
+
+    result = asyncio.run(google_oauth_token_service.get_valid_access_token("123"))
+
+    assert result == {"ok": True, "access_token": "new_access"}
+    refresh_mock.assert_awaited_once_with("123", "refresh_plain")
+    persist_mock.assert_awaited_once()
+
+
+def test_get_valid_access_token_requires_reconnect_when_no_refresh_token(monkeypatch):
+    get_connection_mock = AsyncMock(
+        return_value={
+            "chat_id": "123",
+            "access_token_enc": "enc_old_access",
+            "expires_in": 1,
+            "updated_at": 0,
+        }
+    )
+    monkeypatch.setattr(
+        google_oauth_token_service.google_oauth_repository,
+        "get_connection",
+        get_connection_mock,
+    )
+
+    result = asyncio.run(google_oauth_token_service.get_valid_access_token("123"))
+
+    assert result == {"ok": False, "error": "reconnect_required"}
