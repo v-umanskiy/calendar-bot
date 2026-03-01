@@ -1,7 +1,9 @@
 import httpx
 from typing import Any
+import os
 
 LOG_STRING_LENGTH_LIMIT = 1000
+PROMPT_LOG_MAX_CHARS = int(os.getenv("PROMPT_LOG_MAX_CHARS", "12000"))
 
 
 def sanitize_for_logging(value: Any) -> Any:
@@ -48,7 +50,10 @@ def log_prefixed_fields(prefix: str, *fields: tuple[str, Any]) -> None:
 
     parts = [prefix]
     for name, field_value in fields:
-        parts.append(f"{name}: {sanitize_for_logging(field_value)}")
+        value_for_logging = field_value
+        if isinstance(value_for_logging, str):
+            value_for_logging = _trim_prompt_for_log(value_for_logging)
+        parts.append(f"{name}: {sanitize_for_logging(value_for_logging)}")
 
     print(" ".join(parts))
 
@@ -67,3 +72,10 @@ def log_prefixed_fields_full(prefix: str, *fields: tuple[str, Any]) -> None:
         parts.append(f"{name}: {field_value}")
 
     print(" ".join(parts))
+
+
+def _trim_prompt_for_log(value: str) -> str:
+    if len(value) <= PROMPT_LOG_MAX_CHARS:
+        return value
+    omitted = len(value) - PROMPT_LOG_MAX_CHARS
+    return f"{value[:PROMPT_LOG_MAX_CHARS]}\n...[trimmed {omitted} chars]"

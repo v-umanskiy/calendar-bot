@@ -63,16 +63,15 @@ class GeminiProvider(ModelProvider):
         prompt: str,
         raw_history: Optional[ModelHistory],
     ) -> str:
-        system_instruction = gemini_tools.EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION
-        extra_system_instruction = datetime_utils.current_time_context_block()
-        if extra_system_instruction:
-            system_instruction = f"{system_instruction}\n\n{extra_system_instruction.strip()}"
-
+        system_instruction = (
+            f"{gemini_tools.EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION}\n\n"
+            f"{datetime_utils.current_time_context_block().strip()}"
+        )
         logging_utils.log_prefixed_fields(
             "Calling Gemini.",
             ("PROMPT", prompt),
             ("HISTORY", raw_history),
-            ("SYSTEM_PROMPT", self._trim_prompt_for_log(system_instruction)),
+            ("SYSTEM_PROMPT", system_instruction),
         )
 
         tool_config = {
@@ -196,13 +195,6 @@ class GeminiProvider(ModelProvider):
             current_event_draft_result = next_event_draft_result
 
         return current_results, current_event_draft_result
-
-    @staticmethod
-    def _trim_prompt_for_log(value: str) -> str:
-        if len(value) <= PROMPT_LOG_MAX_CHARS:
-            return value
-        omitted = len(value) - PROMPT_LOG_MAX_CHARS
-        return f"{value[:PROMPT_LOG_MAX_CHARS]}\n...[trimmed {omitted} chars]"
 
     @staticmethod
     def _build_invalid_repair_contents(contents: list[dict], function_results: list[dict]) -> list[dict]:
