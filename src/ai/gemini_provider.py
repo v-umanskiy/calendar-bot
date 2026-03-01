@@ -34,13 +34,10 @@ class GeminiProvider(ModelProvider):
         self,
         prompt: Optional[str] = None,
         history: Optional[ModelHistory] = None,
-        file_bytes: Optional[bytes] = None,
         chat_id: Optional[str] = None,
     ) -> str:
         gemini_history = self._convert_history(history)
         try:
-            if file_bytes:
-                return await self._call_with_photo(file_bytes, prompt, history, gemini_history)
             return await self._call_with_text(prompt or "", history, gemini_history, chat_id=chat_id)
         except (
             google_api_exceptions.ResourceExhausted,
@@ -65,48 +62,16 @@ class GeminiProvider(ModelProvider):
         response, _ = await asyncio.to_thread(self._run_with_tools, contents, chat_id)
         return response
 
-    async def _call_with_photo(
-        self,
-        file_bytes: bytes,
-        prompt: Optional[str],
-        raw_history: Optional[ModelHistory],
-        gemini_history: list[dict],
-    ) -> str:
-        self._log_call(prompt, raw_history, is_photo=True)
-        parts: list[dict] = []
-        prompt_text = prompt or ""
-        parts.append({"text": prompt_text})
-        parts.append({
-            "inline_data": {
-                "mime_type": "image/jpeg",
-                "data": file_bytes,
-            }
-        })
-        contents = self._build_contents(gemini_history, parts)
-        response, _ = await asyncio.to_thread(self._send_to_gemini, contents)
-        return response
-
     def _log_call(
         self,
         prompt: Optional[str],
         history: Optional[ModelHistory],
-        *,
-        is_photo: bool = False,
     ) -> None:
-        prefix = "Calling Gemini with photo." if is_photo else "Calling Gemini."
         logging_utils.log_prefixed_fields(
-            prefix,
+            "Calling Gemini.",
             ("PROMPT", prompt),
             ("HISTORY", history),
         )
-
-    def _send_to_gemini(self, contents: list[dict]) -> tuple[str, Optional[dict]]:
-        self._log_prompts(contents, config=None, stage="plain")
-        response = self._client.models.generate_content(
-            model=self._model_name,
-            contents=contents,
-        )
-        return response.text or "No response", self._extract_usage(response)
 
     def _run_with_tools(
         self,
@@ -128,7 +93,6 @@ class GeminiProvider(ModelProvider):
             print("GEMINI_TOOL_VALIDATION_ERROR: expected at most one function call")
             return MODEL_PROVIDER_UNAVAILABLE_MESSAGE, usage
 
-        event_draft_tool_name = function_calls[0].get("name")
         function_results = gemini_tools.execute_function_calls(function_calls, chat_id)
         event_draft_result = gemini_tools.find_event_draft_result(function_results)
         if event_draft_result and event_draft_result.get("ok"):
@@ -363,18 +327,6 @@ class GeminiProvider(ModelProvider):
             text = turn.get("text")
             if text:
                 parts.append({"text": text})
-
-            for file_entry in turn.get("files", []):
-                data = file_entry.get("data")
-                if not data:
-                    continue
-                mime_type = file_entry.get("mime_type", "image/jpeg")
-                parts.append({
-                    "inline_data": {
-                        "mime_type": mime_type,
-                        "data": data,
-                    }
-                })
 
             if not parts:
                 continue

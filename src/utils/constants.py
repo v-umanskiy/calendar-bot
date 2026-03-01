@@ -9,8 +9,8 @@ TRANSCRIBED_VOICE_PROMPT_TEMPLATE = (
 
 WELCOME_MESSAGE = (
     "👋 Welcome! I’m your assistant bot.\n\n"
-    "You can send me text, voice messages, or photos, and I’ll help you out.\n\n"
-    "⏱ Please be patient. I currently take around 10 seconds to process text or photos, "
+    "You can send me text or voice messages, and I’ll help you out.\n\n"
+    "⏱ Please be patient. I currently take around 10 seconds to process text, "
     "and around 30 seconds to process a voice message.\n\n"
     "Your messages are stored in a database. We don't forward them to any parties but Google Gemini, AWS Transcribe."
 )

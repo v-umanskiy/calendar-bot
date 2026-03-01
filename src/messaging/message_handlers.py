@@ -14,7 +14,6 @@ from src.services import google_calendar_service
 from src.services import google_event_links_table_service
 from .message_processor_simple import (
     handle_text_message as process_text_message,
-    handle_photo_message as process_photo_message,
 )
 from src.utils import logging_utils
 from src.utils.constants import (
@@ -83,22 +82,6 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
     return assistant_reply
 
 
-async def handle_photo_message(file_id: str, caption: str, chat_id: str) -> str | None:
-    indicator = asyncio.create_task(_chat_action_indicator(chat_id, "typing"))
-    try:
-        reply, file_url, file_key = await process_photo_message(file_id, caption, chat_id)
-        await telegram_service.send_message(chat_id, reply)
-        await history_table_service.save_turn(chat_id, "user", caption, file_url, file_key)
-        await history_table_service.save_turn(chat_id, "assistant", reply)
-        return reply
-    finally:
-        indicator.cancel()
-        try:
-            await indicator
-        except asyncio.CancelledError:
-            pass
-
-
 async def handle_voice_message(voice: any, chat_id: str) -> str | None:
     file_id = voice["file_id"]
     file_bytes = await telegram_service.download_file_from_telegram(file_id)
@@ -118,15 +101,15 @@ async def handle_voice_message(voice: any, chat_id: str) -> str | None:
 async def handle_document_message(document: dict, chat_id: str) -> str:
     file_name = document.get("file_name")
     if file_name:
-        message = f"Sorry, I can't process files like {file_name} yet. Try sending text, a voice note, or a photo."
+        message = f"Sorry, I can't process files like {file_name} yet. Try sending text or a voice note."
     else:
-        message = "Sorry, I can't process file attachments yet. Try sending text, a voice note, or a photo."
+        message = "Sorry, I can't process file attachments yet. Try sending text or a voice note."
     await telegram_service.send_message(chat_id, message)
     return message
 
 
 async def handle_unsupported_message(chat_id: str) -> str:
-    message = "Sorry, I'm not sure how to handle that. Try sending text, a voice note, or a photo."
+    message = "Sorry, I'm not sure how to handle that. Try sending text or a voice note."
     await telegram_service.send_message(
         chat_id,
         message,

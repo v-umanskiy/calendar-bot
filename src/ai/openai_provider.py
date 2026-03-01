@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import os
 from typing import Optional
 
@@ -13,14 +12,6 @@ from .model_provider import ModelProvider, ModelHistory
 from src.services import secret_service
 
 
-def _image_content_from_bytes(file_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
-    encoded = base64.b64encode(file_bytes).decode("ascii")
-    return {
-        "type": "image_url",
-        "image_url": {"url": f"data:{mime_type};base64,{encoded}"},
-    }
-
-
 def _convert_history(history: Optional[ModelHistory]) -> list[dict]:
     converted: list[dict] = []
     if not history:
@@ -32,13 +23,6 @@ def _convert_history(history: Optional[ModelHistory]) -> list[dict]:
         text = turn.get("text")
         if text:
             content_parts.append({"type": "text", "text": text})
-
-        for file_entry in turn.get("files", []) or []:
-            data = file_entry.get("data") if isinstance(file_entry, dict) else None
-            if not data:
-                continue
-            mime_type = file_entry.get("mime_type", "image/jpeg") if isinstance(file_entry, dict) else "image/jpeg"
-            content_parts.append(_image_content_from_bytes(data, mime_type))
 
         if not content_parts:
             continue
@@ -63,22 +47,18 @@ class OpenAIProvider(ModelProvider):
         self,
         prompt: Optional[str] = None,
         history: Optional[ModelHistory] = None,
-        file_bytes: Optional[bytes] = None,
         chat_id: Optional[str] = None,
     ) -> str:
         prompt_text = prompt or ""
         logging_utils.log_prefixed_fields(
             "Calling OpenAI.",
             ("PROMPT", prompt_text),
-            ("HAS_FILE", bool(file_bytes)),
         )
 
         messages = _convert_history(history)
         content = []
         if prompt_text:
             content.append({"type": "text", "text": prompt_text})
-        if file_bytes:
-            content.append(_image_content_from_bytes(file_bytes))
         if not content:
             content.append({"type": "text", "text": ""})
         messages.append({"role": "user", "content": content})

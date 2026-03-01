@@ -11,7 +11,6 @@ class ModelProvider(ABC):
         self,
         prompt: Optional[str] = None,
         history: Optional[ModelHistory] = None,
-        file_bytes: Optional[bytes] = None,
         chat_id: Optional[str] = None,
     ) -> str:
         raise NotImplementedError

@@ -22,18 +22,13 @@ async def _handle_telegram_webhook_data(data: any) -> any:
         return {"ok": True}
 
     chat_id = message["chat"]["id"]
-    photos = message.get("photo")
     voice = message.get("voice")
     document = message.get("document")
     text = message.get("text")
 
     reply = None
     try:
-        if photos:
-            file_id = photos[-1]["file_id"]
-            caption = message.get("caption")
-            reply = await message_handlers.handle_photo_message(file_id, caption, chat_id)
-        elif voice:
+        if voice:
             reply = await message_handlers.handle_voice_message(voice, chat_id)
         elif document:
             reply = await message_handlers.handle_document_message(document, chat_id)
