@@ -45,22 +45,17 @@ class OpenAIProvider(ModelProvider):
 
     async def generate_reply(
         self,
-        prompt: Optional[str] = None,
+        prompt: str,
         history: Optional[ModelHistory] = None,
         chat_id: Optional[str] = None,
     ) -> str:
-        prompt_text = prompt or ""
         logging_utils.log_prefixed_fields(
             "Calling OpenAI.",
-            ("PROMPT", prompt_text),
+            ("PROMPT", prompt),
         )
 
         messages = _convert_history(history)
-        content = []
-        if prompt_text:
-            content.append({"type": "text", "text": prompt_text})
-        if not content:
-            content.append({"type": "text", "text": ""})
+        content = [{"type": "text", "text": prompt}]
         messages.append({"role": "user", "content": content})
 
         try:

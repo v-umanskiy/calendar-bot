@@ -1,4 +1,5 @@
 import asyncio
+import pytest
 from unittest.mock import AsyncMock, call
 
 from tests.services import testing_helpers
@@ -79,6 +80,26 @@ def test_handle_text_message_returns_when_code_handled(monkeypatch):
     load_history_mock.assert_not_awaited()
     send_message_mock.assert_not_awaited()
     save_turn_mock.assert_not_awaited()
+    indicator_mock.assert_not_called()
+
+
+def test_handle_text_message_raises_on_empty_text(monkeypatch):
+    chat_id = "chat-empty"
+    text = "   "
+
+    handle_codes_mock = AsyncMock(return_value=None)
+    monkeypatch.setattr(message_handlers, "_handle_message_codes", handle_codes_mock)
+
+    load_history_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers.history_table_service, "load_model_history", load_history_mock)
+
+    indicator_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers, "_chat_action_indicator", indicator_mock)
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        asyncio.run(message_handlers.handle_text_message(chat_id, text))
+
+    load_history_mock.assert_not_awaited()
     indicator_mock.assert_not_called()
 
 

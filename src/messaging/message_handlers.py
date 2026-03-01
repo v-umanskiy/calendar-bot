@@ -39,6 +39,8 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
     command_reply = await _handle_message_codes(chat_id, text)
     if command_reply is not None:
         return command_reply
+    if not text.strip():
+        raise ValueError("Text message must not be empty.")
 
     indicator = asyncio.create_task(_chat_action_indicator(chat_id, "typing"))
     reply = None

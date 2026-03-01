@@ -9,7 +9,7 @@ class ModelProvider(ABC):
     @abstractmethod
     async def generate_reply(
         self,
-        prompt: Optional[str] = None,
+        prompt: str,
         history: Optional[ModelHistory] = None,
         chat_id: Optional[str] = None,
     ) -> str:

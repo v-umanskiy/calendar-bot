@@ -32,19 +32,18 @@ class GeminiProvider(ModelProvider):
 
     async def generate_reply(
         self,
-        prompt: Optional[str] = None,
+        prompt: str,
         history: Optional[ModelHistory] = None,
         chat_id: Optional[str] = None,
     ) -> str:
-        prompt_text = prompt or ""
         gemini_history = self._convert_history(history)
-        contents = self._build_contents(gemini_history, [{"text": prompt_text}])
+        contents = self._build_contents(gemini_history, [{"text": prompt}])
         try:
             return await asyncio.to_thread(
                 self._run_with_tools,
                 contents,
                 chat_id,
-                prompt_text,
+                prompt,
                 history,
             )
         except (
