@@ -1,5 +1,4 @@
 import asyncio
-from datetime import datetime
 import os
 from typing import Optional
 
@@ -18,20 +17,11 @@ from .model_provider import ModelProvider, ModelHistory
 from . import gemini_tools
 from src.services import secret_service
 from src.services import google_calendar_service
+from src.utils import datetime_utils
 
 
 MAX_INVALID_REPAIR_ATTEMPTS = 2
 PROMPT_LOG_MAX_CHARS = int(os.getenv("PROMPT_LOG_MAX_CHARS", "12000"))
-
-
-def _current_time_context_block() -> str:
-    now_local = datetime.now().astimezone()
-    current_time_iso = now_local.replace(tzinfo=None).isoformat(timespec="seconds")
-    weekday_name = now_local.strftime("%A")
-    return (
-        f"current_datetime_rfc3339_local: {current_time_iso}\n"
-        f"current_weekday_local: {weekday_name}"
-    )
 
 
 class GeminiProvider(ModelProvider):
@@ -123,7 +113,7 @@ class GeminiProvider(ModelProvider):
         contents: list[dict],
         chat_id: Optional[str],
     ) -> tuple[str, Optional[dict]]:
-        tool_config = gemini_tools.build_event_draft_tool_config(_current_time_context_block())
+        tool_config = gemini_tools.build_event_draft_tool_config(datetime_utils.current_time_context_block())
         self._log_prompts(contents, config=tool_config, stage="tool_call")
         response = self._client.models.generate_content(
             model=self._model_name,
