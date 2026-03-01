@@ -90,92 +90,118 @@ class GeminiProvider(ModelProvider):
             print("GEMINI_TOOL_VALIDATION_ERROR: expected at most one function call")
             return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
 
-        function_results = gemini_tools.execute_function_calls(function_calls, chat_id)
-        event_draft_update_result = gemini_tools.find_event_draft_update_result(function_results)
+        function_result = self._execute_tool_lifecycle(
+            contents,
+            chat_id,
+            function_calls[0],
+            tool_config,
+        )
+        reply = self._resolve_tool_decision(
+            chat_id,
+            contents,
+            function_result,
+        )
+        if reply:
+            return reply
+        return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+
+    def _execute_tool_lifecycle(
+        self,
+        contents: list[dict],
+        chat_id: Optional[str],
+        function_call: dict,
+        tool_config: dict,
+    ) -> dict:
+        function_result = {
+            "name": function_call.get("name"),
+            "result": gemini_tools.execute_tool_call(function_call, chat_id),
+        }
+        event_draft_update_result = function_result.get("result")
         if event_draft_update_result and event_draft_update_result.get("ok"):
-            function_results, event_draft_update_result = self._repair_invalid_result_if_needed(
+            function_result = self._repair_invalid_result_if_needed(
                 contents,
                 chat_id,
-                function_results,
-                event_draft_update_result,
+                function_result,
                 tool_config,
             )
+        return function_result
 
-        if event_draft_update_result and event_draft_update_result.get("ok"):
-            missing_required = event_draft_update_result.get("missing_required") or []
-            invalid_fields = event_draft_update_result.get("invalid_fields") or []
-            if not missing_required and not invalid_fields:
-                draft = event_draft_update_result.get("draft") or {}
-                if chat_id is None:
-                    return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
-                create_result = asyncio.run(
-                    google_calendar_service.create_primary_event(
-                        str(chat_id),
-                        title=str(draft.get("title") or ""),
-                        start=str(draft.get("start") or ""),
-                        end=str(draft.get("end") or ""),
-                    )
-                )
-                if not create_result.get("ok"):
-                    if create_result.get("error") in {"reconnect_required", "not_connected", "missing_access_token"}:
-                        return EVENT_RECONNECT_REQUIRED_MESSAGE
-                    return EVENT_SAVE_FAILED_MESSAGE
-                summary = EVENT_SAVE_SUCCESS_MESSAGE_TEMPLATE.format(
-                    title=str(draft.get("title") or ""),
-                    start=str(draft.get("start") or ""),
-                    end=str(draft.get("end") or ""),
-                )
-                return gemini_tools.build_event_created_reply(
-                    summary,
-                    str(create_result.get("calendar_id") or "primary"),
-                    str(create_result.get("google_event_id") or ""),
-                )
-            if invalid_fields:
-                follow_up_contents = self._build_invalid_follow_up_contents(contents, function_results)
-                follow_up_response = self._client.models.generate_content(
-                    model=self._model_name,
-                    contents=follow_up_contents,
-                )
-                follow_up_text = follow_up_response.text or ""
-                if follow_up_text:
-                    return follow_up_text
-            elif missing_required:
-                follow_up_contents = self._build_missing_follow_up_contents(contents, function_results)
-                follow_up_response = self._client.models.generate_content(
-                    model=self._model_name,
-                    contents=follow_up_contents,
-                )
-                follow_up_text = follow_up_response.text or ""
-                if follow_up_text:
-                    return follow_up_text
+    def _resolve_tool_decision(
+        self,
+        chat_id: Optional[str],
+        contents: list[dict],
+        function_result: dict,
+    ) -> Optional[str]:
+        event_draft_update_result = function_result.get("result")
+        if not event_draft_update_result or not isinstance(event_draft_update_result, dict):
+            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+        if not event_draft_update_result.get("ok"):
+            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
 
-        fallback_contents = self._build_missing_follow_up_contents(contents, function_results)
+        missing_required = event_draft_update_result.get("missing_required") or []
+        invalid_fields = event_draft_update_result.get("invalid_fields") or []
+        if not missing_required and not invalid_fields:
+            return self._create_calendar_event(chat_id, event_draft_update_result.get("draft") or {})
+        if invalid_fields:
+            follow_up_contents = self._build_invalid_follow_up_contents(contents, function_result)
+            return self._generate_follow_up_reply(follow_up_contents)
+        if missing_required:
+            follow_up_contents = self._build_missing_follow_up_contents(contents, function_result)
+            return self._generate_follow_up_reply(follow_up_contents)
+        return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+
+    def _create_calendar_event(self, chat_id: Optional[str], draft: dict) -> str:
+        if chat_id is None:
+            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+        create_result = asyncio.run(
+            google_calendar_service.create_primary_event(
+                str(chat_id),
+                title=str(draft.get("title") or ""),
+                start=str(draft.get("start") or ""),
+                end=str(draft.get("end") or ""),
+            )
+        )
+        if not create_result.get("ok"):
+            if create_result.get("error") in {"reconnect_required", "not_connected", "missing_access_token"}:
+                return EVENT_RECONNECT_REQUIRED_MESSAGE
+            return EVENT_SAVE_FAILED_MESSAGE
+        summary = EVENT_SAVE_SUCCESS_MESSAGE_TEMPLATE.format(
+            title=str(draft.get("title") or ""),
+            start=str(draft.get("start") or ""),
+            end=str(draft.get("end") or ""),
+        )
+        return gemini_tools.build_event_created_reply(
+            summary,
+            str(create_result.get("calendar_id") or "primary"),
+            str(create_result.get("google_event_id") or ""),
+        )
+
+    def _generate_follow_up_reply(self, follow_up_contents: list[dict]) -> Optional[str]:
         follow_up_response = self._client.models.generate_content(
             model=self._model_name,
-            contents=fallback_contents,
+            contents=follow_up_contents,
         )
         follow_up_text = follow_up_response.text or ""
         if follow_up_text:
             return follow_up_text
-        return response.text or "No response"
+        return None
 
     def _repair_invalid_result_if_needed(
         self,
         contents: list[dict],
         chat_id: Optional[str],
-        function_results: list[dict],
-        event_draft_result: dict,
+        function_result: dict,
         tool_config: dict,
-    ) -> tuple[list[dict], dict]:
-        current_results = function_results
-        current_event_draft_result = event_draft_result
+    ) -> dict:
+        current_result = function_result
 
         for _ in range(MAX_INVALID_REPAIR_ATTEMPTS):
+            current_event_draft_result = current_result.get("result") or {}
             invalid_fields = current_event_draft_result.get("invalid_fields") or []
             if not invalid_fields:
                 break
 
-            repair_contents = self._build_invalid_repair_contents(contents, current_results)
+            repair_contents = self._build_invalid_repair_contents(contents, current_result)
             repair_response = self._client.models.generate_content(
                 model=self._model_name,
                 contents=repair_contents,
@@ -188,19 +214,21 @@ class GeminiProvider(ModelProvider):
                 print("GEMINI_TOOL_VALIDATION_ERROR: expected at most one repair function call")
                 break
 
-            current_results = gemini_tools.execute_function_calls([repair_calls[0]], chat_id)
-            next_event_draft_result = gemini_tools.find_event_draft_update_result(current_results)
+            current_result = {
+                "name": repair_calls[0].get("name"),
+                "result": gemini_tools.execute_tool_call(repair_calls[0], chat_id),
+            }
+            next_event_draft_result = current_result.get("result")
             if not next_event_draft_result or not next_event_draft_result.get("ok"):
                 break
-            current_event_draft_result = next_event_draft_result
 
-        return current_results, current_event_draft_result
+        return current_result
 
     @staticmethod
-    def _build_invalid_repair_contents(contents: list[dict], function_results: list[dict]) -> list[dict]:
+    def _build_invalid_repair_contents(contents: list[dict], function_result: dict) -> list[dict]:
         repair_instruction = (
             "Tool call results indicate invalid_fields. This is your formatting/normalization failure.\n"
-            f"Tool results JSON:\n{gemini_tools.tool_results_to_json(function_results)}\n\n"
+            f"Tool results JSON:\n{gemini_tools.tool_results_to_json(function_result)}\n\n"
             "Try to correct invalid fields to RFC3339 datetime and call the relevant event draft tool again.\n"
             "Only include corrected values for invalid fields.\n"
             "If you cannot confidently normalize from context, do not guess; ask the user a concise clarification question."
@@ -210,10 +238,10 @@ class GeminiProvider(ModelProvider):
         return updated_contents
 
     @staticmethod
-    def _build_missing_follow_up_contents(contents: list[dict], function_results: list[dict]) -> list[dict]:
+    def _build_missing_follow_up_contents(contents: list[dict], function_result: dict) -> list[dict]:
         follow_up_instruction = (
             "Tool calls were executed. Use this JSON result to continue the conversation:\n"
-            f"{gemini_tools.tool_results_to_json(function_results)}\n\n"
+            f"{gemini_tools.tool_results_to_json(function_result)}\n\n"
             "If missing_required has entries, ask the user only for those missing mandatory fields.\n"
             "Be concise and ask only one focused follow-up question when possible.\n"
             "Do not mention internal tools."
@@ -223,10 +251,10 @@ class GeminiProvider(ModelProvider):
         return updated_contents
 
     @staticmethod
-    def _build_invalid_follow_up_contents(contents: list[dict], function_results: list[dict]) -> list[dict]:
+    def _build_invalid_follow_up_contents(contents: list[dict], function_result: dict) -> list[dict]:
         follow_up_instruction = (
             "Tool calls were executed. Use this JSON result to continue the conversation:\n"
-            f"{gemini_tools.tool_results_to_json(function_results)}\n\n"
+            f"{gemini_tools.tool_results_to_json(function_result)}\n\n"
             "invalid_fields are still present after normalization attempts.\n"
             "Ask a neutral clarification question for explicit date/time.\n"
             "Do not blame the user and do not mention internal tools.\n"

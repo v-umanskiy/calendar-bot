@@ -117,21 +117,11 @@ def execute_tool_call(function_call: dict, chat_id: Optional[str]) -> dict:
         return {"ok": False, "error": "tool_execution_failed"}
 
 
-def find_event_draft_update_result(function_results: list[dict]) -> Optional[dict]:
-    for item in function_results:
-        if item.get("name") not in {EVENT_DRAFT_TOOL_NAME, NEW_EVENT_DRAFT_TOOL_NAME}:
-            continue
-        result = item.get("result")
-        if isinstance(result, dict):
-            return result
-    return None
-
-
-def tool_results_to_json(function_results: list[dict]) -> str:
+def tool_results_to_json(function_result: dict) -> str:
     try:
-        return json.dumps(function_results, ensure_ascii=True)
+        return json.dumps(function_result, ensure_ascii=True)
     except Exception:
-        return "[]"
+        return "{}"
 
 
 def build_complete_draft_summary(draft: dict, tool_name: Optional[str] = None) -> str:

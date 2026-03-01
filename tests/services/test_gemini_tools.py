@@ -51,24 +51,6 @@ def test_execute_tool_call_routes_to_replace_for_new_event(monkeypatch):
     upsert_mock.assert_not_awaited()
 
 
-def test_find_event_draft_result_accepts_both_tool_names():
-    upsert_result = {"ok": True, "draft": {"title": "A"}}
-    replace_result = {"ok": True, "draft": {"title": "B"}}
-
-    assert gemini_tools.find_event_draft_update_result(
-        [
-            {"name": "other_tool", "result": {"ok": True}},
-            {"name": gemini_tools.EVENT_DRAFT_TOOL_NAME, "result": upsert_result},
-        ]
-    ) == upsert_result
-
-    assert gemini_tools.find_event_draft_update_result(
-        [
-            {"name": gemini_tools.NEW_EVENT_DRAFT_TOOL_NAME, "result": replace_result},
-        ]
-    ) == replace_result
-
-
 def test_build_complete_draft_summary_for_new_event_action():
     text = gemini_tools.build_complete_draft_summary(
         {
