@@ -116,8 +116,8 @@ class GeminiProvider(ModelProvider):
             "name": function_call.get("name"),
             "result": gemini_tools.execute_tool_call(function_call, chat_id),
         }
-        event_draft_update_result = function_result.get("result")
-        if event_draft_update_result and event_draft_update_result.get("ok"):
+        result = function_result.get("result")
+        if isinstance(result, dict) and result.get("ok"):
             function_result = self._repair_invalid_result_if_needed(
                 contents,
                 chat_id,
@@ -133,10 +133,8 @@ class GeminiProvider(ModelProvider):
         function_result: dict,
     ) -> Optional[str]:
         event_draft_update_result = function_result.get("result")
-        if not event_draft_update_result or not isinstance(event_draft_update_result, dict):
-            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
-        if not event_draft_update_result.get("ok"):
-            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+        if not isinstance(event_draft_update_result, dict) or not event_draft_update_result.get("ok"):
+            return None
 
         missing_required = event_draft_update_result.get("missing_required") or []
         invalid_fields = event_draft_update_result.get("invalid_fields") or []
@@ -148,7 +146,7 @@ class GeminiProvider(ModelProvider):
         if missing_required:
             follow_up_contents = self._build_missing_follow_up_contents(contents, function_result)
             return self._generate_follow_up_reply(follow_up_contents)
-        return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+        return None
 
     def _create_calendar_event(self, chat_id: Optional[str], draft: dict) -> str:
         if chat_id is None:
