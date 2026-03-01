@@ -91,21 +91,21 @@ class GeminiProvider(ModelProvider):
             return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
 
         function_results = gemini_tools.execute_function_calls(function_calls, chat_id)
-        event_draft_result = gemini_tools.find_event_draft_result(function_results)
-        if event_draft_result and event_draft_result.get("ok"):
-            function_results, event_draft_result = self._repair_invalid_result_if_needed(
+        event_draft_update_result = gemini_tools.find_event_draft_update_result(function_results)
+        if event_draft_update_result and event_draft_update_result.get("ok"):
+            function_results, event_draft_update_result = self._repair_invalid_result_if_needed(
                 contents,
                 chat_id,
                 function_results,
-                event_draft_result,
+                event_draft_update_result,
                 tool_config,
             )
 
-        if event_draft_result and event_draft_result.get("ok"):
-            missing_required = event_draft_result.get("missing_required") or []
-            invalid_fields = event_draft_result.get("invalid_fields") or []
+        if event_draft_update_result and event_draft_update_result.get("ok"):
+            missing_required = event_draft_update_result.get("missing_required") or []
+            invalid_fields = event_draft_update_result.get("invalid_fields") or []
             if not missing_required and not invalid_fields:
-                draft = event_draft_result.get("draft") or {}
+                draft = event_draft_update_result.get("draft") or {}
                 if chat_id is None:
                     return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
                 create_result = asyncio.run(
@@ -189,7 +189,7 @@ class GeminiProvider(ModelProvider):
                 break
 
             current_results = gemini_tools.execute_function_calls([repair_calls[0]], chat_id)
-            next_event_draft_result = gemini_tools.find_event_draft_result(current_results)
+            next_event_draft_result = gemini_tools.find_event_draft_update_result(current_results)
             if not next_event_draft_result or not next_event_draft_result.get("ok"):
                 break
             current_event_draft_result = next_event_draft_result

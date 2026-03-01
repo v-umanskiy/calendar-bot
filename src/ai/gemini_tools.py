@@ -117,7 +117,7 @@ def execute_tool_call(function_call: dict, chat_id: Optional[str]) -> dict:
         return {"ok": False, "error": "tool_execution_failed"}
 
 
-def find_event_draft_result(function_results: list[dict]) -> Optional[dict]:
+def find_event_draft_update_result(function_results: list[dict]) -> Optional[dict]:
     for item in function_results:
         if item.get("name") not in {EVENT_DRAFT_TOOL_NAME, NEW_EVENT_DRAFT_TOOL_NAME}:
             continue
