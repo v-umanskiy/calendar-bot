@@ -25,6 +25,8 @@ MODEL_PROVIDER_UNAVAILABLE_MESSAGE = (
     "I ran into an issue talking to the AI service. Let's try again in a moment."
 )
 
+UNSUPPORTED_INPUT_MESSAGE = "Sorry, I can only process text or voice messages."
+
 
 CLEAR_HISTORY_MESSAGE = (
     "Are you sure you want to clear the bot's history? You will still see the messages in Telegram, "

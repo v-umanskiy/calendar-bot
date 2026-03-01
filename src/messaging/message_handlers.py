@@ -21,6 +21,7 @@ from src.utils.constants import (
     CLEAR_HISTORY_MESSAGE,
     HISTORY_CLEARED_MESSAGE,
     GOOGLE_CONNECT_MESSAGE_TEMPLATE,
+    UNSUPPORTED_INPUT_MESSAGE,
     EVENT_CREATED_REPLY_PREFIX,
     EVENT_REMOVE_BUTTON_TEXT,
     EVENT_REMOVE_CALLBACK_DATA,
@@ -98,18 +99,8 @@ async def handle_voice_message(voice: any, chat_id: str) -> str | None:
         return message
 
 
-async def handle_document_message(document: dict, chat_id: str) -> str:
-    file_name = document.get("file_name")
-    if file_name:
-        message = f"Sorry, I can't process files like {file_name} yet. Try sending text or a voice note."
-    else:
-        message = "Sorry, I can't process file attachments yet. Try sending text or a voice note."
-    await telegram_service.send_message(chat_id, message)
-    return message
-
-
 async def handle_unsupported_message(chat_id: str) -> str:
-    message = "Sorry, I'm not sure how to handle that. Try sending text or a voice note."
+    message = UNSUPPORTED_INPUT_MESSAGE
     await telegram_service.send_message(
         chat_id,
         message,

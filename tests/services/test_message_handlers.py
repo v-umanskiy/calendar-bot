@@ -9,6 +9,7 @@ from src.utils.constants import (
     EVENT_CREATED_REPLY_PREFIX,
     EVENT_REMOVE_CALLBACK_DATA,
     EVENT_REMOVED_MESSAGE,
+    UNSUPPORTED_INPUT_MESSAGE,
 )
 
 
@@ -209,20 +210,6 @@ def test_handle_callback_query_remove_event_happy_path(monkeypatch):
     send_message_mock.assert_awaited_once_with("chat-111", EVENT_REMOVED_MESSAGE)
 
 
-def test_handle_document_message_mentions_text_and_voice_only(monkeypatch):
-    chat_id = "chat-222"
-    document = {"file_name": "notes.pdf"}
-
-    send_message_mock = AsyncMock()
-    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
-
-    result = asyncio.run(message_handlers.handle_document_message(document, chat_id))
-
-    expected = "Sorry, I can't process files like notes.pdf yet. Try sending text or a voice note."
-    assert result == expected
-    send_message_mock.assert_awaited_once_with(chat_id, expected)
-
-
 def test_handle_unsupported_message_mentions_text_and_voice_only(monkeypatch):
     chat_id = "chat-333"
 
@@ -231,6 +218,5 @@ def test_handle_unsupported_message_mentions_text_and_voice_only(monkeypatch):
 
     result = asyncio.run(message_handlers.handle_unsupported_message(chat_id))
 
-    expected = "Sorry, I'm not sure how to handle that. Try sending text or a voice note."
-    assert result == expected
-    send_message_mock.assert_awaited_once_with(chat_id, expected)
+    assert result == UNSUPPORTED_INPUT_MESSAGE
+    send_message_mock.assert_awaited_once_with(chat_id, UNSUPPORTED_INPUT_MESSAGE)

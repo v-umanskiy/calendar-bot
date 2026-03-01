@@ -31,7 +31,7 @@ async def _handle_telegram_webhook_data(data: any) -> any:
         if voice:
             reply = await message_handlers.handle_voice_message(voice, chat_id)
         elif document:
-            reply = await message_handlers.handle_document_message(document, chat_id)
+            reply = await message_handlers.handle_unsupported_message(chat_id)
         elif text:
             reply = await message_handlers.handle_text_message(chat_id, text)
         else:
