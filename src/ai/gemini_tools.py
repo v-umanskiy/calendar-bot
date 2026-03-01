@@ -64,6 +64,16 @@ EVENT_DRAFT_TOOL_CONFIG = {
 }
 
 
+def build_event_draft_tool_config(extra_system_instruction: str | None = None) -> dict:
+    system_instruction = EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION
+    if extra_system_instruction:
+        system_instruction = f"{system_instruction}\n\n{extra_system_instruction.strip()}"
+    return {
+        "systemInstruction": system_instruction,
+        "tools": EVENT_DRAFT_TOOL_CONFIG["tools"],
+    }
+
+
 def execute_function_calls(function_calls: list[dict], chat_id: Optional[str]) -> list[dict]:
     results: list[dict] = []
     for function_call in function_calls:

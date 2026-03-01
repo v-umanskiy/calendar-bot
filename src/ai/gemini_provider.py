@@ -21,20 +21,17 @@ from src.services import google_calendar_service
 
 
 MAX_INVALID_REPAIR_ATTEMPTS = 2
+PROMPT_LOG_MAX_CHARS = int(os.getenv("PROMPT_LOG_MAX_CHARS", "12000"))
 
 
 def _current_time_context_block() -> str:
     now_local = datetime.now().astimezone()
     current_time_iso = now_local.replace(tzinfo=None).isoformat(timespec="seconds")
-    return (f"\ncurrent_datetime_rfc3339_local: {current_time_iso}\n")
-
-
-def _with_time_context(prompt: str) -> str:
-    base_prompt = (prompt or "").strip()
-    context_block = _current_time_context_block()
-    if base_prompt:
-        return f"{base_prompt}\n\n{context_block}"
-    return context_block
+    weekday_name = now_local.strftime("%A")
+    return (
+        f"current_datetime_rfc3339_local: {current_time_iso}\n"
+        f"current_weekday_local: {weekday_name}"
+    )
 
 
 class GeminiProvider(ModelProvider):
@@ -74,7 +71,7 @@ class GeminiProvider(ModelProvider):
         chat_id: Optional[str],
     ) -> str:
         self._log_call(prompt, raw_history)
-        contents = self._build_contents(gemini_history, [{"text": _with_time_context(prompt)}])
+        contents = self._build_contents(gemini_history, [{"text": prompt}])
         response, _ = await asyncio.to_thread(self._run_with_tools, contents, chat_id)
         return response
 
@@ -88,7 +85,7 @@ class GeminiProvider(ModelProvider):
         self._log_call(prompt, raw_history, is_photo=True)
         parts: list[dict] = []
         prompt_text = prompt or ""
-        parts.append({"text": _with_time_context(prompt_text)})
+        parts.append({"text": prompt_text})
         parts.append({
             "inline_data": {
                 "mime_type": "image/jpeg",
@@ -114,6 +111,7 @@ class GeminiProvider(ModelProvider):
         )
 
     def _send_to_gemini(self, contents: list[dict]) -> tuple[str, Optional[dict]]:
+        self._log_prompts(contents, config=None, stage="plain")
         response = self._client.models.generate_content(
             model=self._model_name,
             contents=contents,
@@ -125,10 +123,12 @@ class GeminiProvider(ModelProvider):
         contents: list[dict],
         chat_id: Optional[str],
     ) -> tuple[str, Optional[dict]]:
+        tool_config = gemini_tools.build_event_draft_tool_config(_current_time_context_block())
+        self._log_prompts(contents, config=tool_config, stage="tool_call")
         response = self._client.models.generate_content(
             model=self._model_name,
             contents=contents,
-            config=gemini_tools.EVENT_DRAFT_TOOL_CONFIG,
+            config=tool_config,
         )
         usage = self._extract_usage(response)
         function_calls = gemini_tools.extract_function_calls(response)
@@ -147,6 +147,7 @@ class GeminiProvider(ModelProvider):
                 chat_id,
                 function_results,
                 event_draft_result,
+                tool_config,
             )
 
         if event_draft_result and event_draft_result.get("ok"):
@@ -179,25 +180,31 @@ class GeminiProvider(ModelProvider):
                     str(create_result.get("google_event_id") or ""),
                 ), usage
             if invalid_fields:
+                follow_up_contents = self._build_invalid_follow_up_contents(contents, function_results)
+                self._log_prompts(follow_up_contents, config=None, stage="invalid_follow_up")
                 follow_up_response = self._client.models.generate_content(
                     model=self._model_name,
-                    contents=self._build_invalid_follow_up_contents(contents, function_results),
+                    contents=follow_up_contents,
                 )
                 follow_up_text = follow_up_response.text or ""
                 if follow_up_text:
                     return follow_up_text, usage
             elif missing_required:
+                follow_up_contents = self._build_missing_follow_up_contents(contents, function_results)
+                self._log_prompts(follow_up_contents, config=None, stage="missing_follow_up")
                 follow_up_response = self._client.models.generate_content(
                     model=self._model_name,
-                    contents=self._build_missing_follow_up_contents(contents, function_results),
+                    contents=follow_up_contents,
                 )
                 follow_up_text = follow_up_response.text or ""
                 if follow_up_text:
                     return follow_up_text, usage
 
+        fallback_contents = self._build_missing_follow_up_contents(contents, function_results)
+        self._log_prompts(fallback_contents, config=None, stage="fallback_follow_up")
         follow_up_response = self._client.models.generate_content(
             model=self._model_name,
-            contents=self._build_missing_follow_up_contents(contents, function_results),
+            contents=fallback_contents,
         )
         follow_up_text = follow_up_response.text or ""
         if follow_up_text:
@@ -210,6 +217,7 @@ class GeminiProvider(ModelProvider):
         chat_id: Optional[str],
         function_results: list[dict],
         event_draft_result: dict,
+        tool_config: dict,
     ) -> tuple[list[dict], dict]:
         current_results = function_results
         current_event_draft_result = event_draft_result
@@ -219,10 +227,12 @@ class GeminiProvider(ModelProvider):
             if not invalid_fields:
                 break
 
+            repair_contents = self._build_invalid_repair_contents(contents, current_results)
+            self._log_prompts(repair_contents, config=tool_config, stage="repair")
             repair_response = self._client.models.generate_content(
                 model=self._model_name,
-                contents=self._build_invalid_repair_contents(contents, current_results),
-                config=gemini_tools.EVENT_DRAFT_TOOL_CONFIG,
+                contents=repair_contents,
+                config=tool_config,
             )
             repair_calls = gemini_tools.extract_function_calls(repair_response)
             if not repair_calls:
@@ -238,6 +248,53 @@ class GeminiProvider(ModelProvider):
             current_event_draft_result = next_event_draft_result
 
         return current_results, current_event_draft_result
+
+    def _log_prompts(self, contents: list[dict], config: Optional[dict], *, stage: str) -> None:
+        user_prompt = self._extract_last_user_prompt(contents)
+        system_prompt = self._extract_system_prompt(config)
+        logging_utils.log_prefixed_fields_full(
+            "LLM_PROMPT",
+            ("STAGE", stage),
+            ("SYSTEM_PROMPT", self._trim_prompt_for_log(system_prompt)),
+            ("USER_PROMPT", self._trim_prompt_for_log(user_prompt)),
+        )
+
+    @staticmethod
+    def _extract_last_user_prompt(contents: list[dict]) -> str:
+        for item in reversed(contents):
+            if not isinstance(item, dict):
+                continue
+            if item.get("role") != "user":
+                continue
+            parts = item.get("parts")
+            if not isinstance(parts, list):
+                continue
+            text_parts: list[str] = []
+            for part in parts:
+                if not isinstance(part, dict):
+                    continue
+                text = part.get("text")
+                if isinstance(text, str) and text:
+                    text_parts.append(text)
+            if text_parts:
+                return "\n\n".join(text_parts)
+        return ""
+
+    @staticmethod
+    def _extract_system_prompt(config: Optional[dict]) -> str:
+        if not isinstance(config, dict):
+            return ""
+        value = config.get("systemInstruction")
+        if isinstance(value, str):
+            return value
+        return ""
+
+    @staticmethod
+    def _trim_prompt_for_log(value: str) -> str:
+        if len(value) <= PROMPT_LOG_MAX_CHARS:
+            return value
+        omitted = len(value) - PROMPT_LOG_MAX_CHARS
+        return f"{value[:PROMPT_LOG_MAX_CHARS]}\n...[trimmed {omitted} chars]"
 
     @staticmethod
     def _build_invalid_repair_contents(contents: list[dict], function_results: list[dict]) -> list[dict]:
