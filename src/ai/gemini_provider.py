@@ -36,15 +36,17 @@ class GeminiProvider(ModelProvider):
         history: Optional[ModelHistory] = None,
         chat_id: Optional[str] = None,
     ) -> str:
+        prompt_text = prompt or ""
         gemini_history = self._convert_history(history)
+        contents = self._build_contents(gemini_history, [{"text": prompt_text}])
         try:
-            logging_utils.log_prefixed_fields(
-                "Calling Gemini.",
-                ("PROMPT", prompt),
-                ("HISTORY", history),
+            return await asyncio.to_thread(
+                self._run_with_tools,
+                contents,
+                chat_id,
+                prompt_text,
+                history,
             )
-            contents = self._build_contents(gemini_history, [{"text": prompt}])
-            return await asyncio.to_thread(self._run_with_tools, contents, chat_id)
         except (
             google_api_exceptions.ResourceExhausted,
             google_api_exceptions.TooManyRequests,
@@ -59,9 +61,25 @@ class GeminiProvider(ModelProvider):
         self,
         contents: list[dict],
         chat_id: Optional[str],
-    ) -> tuple[str, Optional[dict]]:
-        tool_config = gemini_tools.build_event_draft_tool_config(datetime_utils.current_time_context_block())
-        self._log_prompts(contents, config=tool_config, stage="tool_call")
+        prompt: str,
+        raw_history: Optional[ModelHistory],
+    ) -> str:
+        system_instruction = gemini_tools.EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION
+        extra_system_instruction = datetime_utils.current_time_context_block()
+        if extra_system_instruction:
+            system_instruction = f"{system_instruction}\n\n{extra_system_instruction.strip()}"
+
+        logging_utils.log_prefixed_fields(
+            "Calling Gemini.",
+            ("PROMPT", prompt),
+            ("HISTORY", raw_history),
+            ("SYSTEM_PROMPT", self._trim_prompt_for_log(system_instruction)),
+        )
+
+        tool_config = {
+            "systemInstruction": system_instruction,
+            "tools": gemini_tools.EVENT_DRAFT_TOOL_CONFIG["tools"],
+        }
         response = self._client.models.generate_content(
             model=self._model_name,
             contents=contents,
@@ -116,7 +134,6 @@ class GeminiProvider(ModelProvider):
                 )
             if invalid_fields:
                 follow_up_contents = self._build_invalid_follow_up_contents(contents, function_results)
-                self._log_prompts(follow_up_contents, config=None, stage="invalid_follow_up")
                 follow_up_response = self._client.models.generate_content(
                     model=self._model_name,
                     contents=follow_up_contents,
@@ -126,7 +143,6 @@ class GeminiProvider(ModelProvider):
                     return follow_up_text
             elif missing_required:
                 follow_up_contents = self._build_missing_follow_up_contents(contents, function_results)
-                self._log_prompts(follow_up_contents, config=None, stage="missing_follow_up")
                 follow_up_response = self._client.models.generate_content(
                     model=self._model_name,
                     contents=follow_up_contents,
@@ -136,7 +152,6 @@ class GeminiProvider(ModelProvider):
                     return follow_up_text
 
         fallback_contents = self._build_missing_follow_up_contents(contents, function_results)
-        self._log_prompts(fallback_contents, config=None, stage="fallback_follow_up")
         follow_up_response = self._client.models.generate_content(
             model=self._model_name,
             contents=fallback_contents,
@@ -163,7 +178,6 @@ class GeminiProvider(ModelProvider):
                 break
 
             repair_contents = self._build_invalid_repair_contents(contents, current_results)
-            self._log_prompts(repair_contents, config=tool_config, stage="repair")
             repair_response = self._client.models.generate_content(
                 model=self._model_name,
                 contents=repair_contents,
@@ -183,46 +197,6 @@ class GeminiProvider(ModelProvider):
             current_event_draft_result = next_event_draft_result
 
         return current_results, current_event_draft_result
-
-    def _log_prompts(self, contents: list[dict], config: Optional[dict], *, stage: str) -> None:
-        user_prompt = self._extract_last_user_prompt(contents)
-        system_prompt = self._extract_system_prompt(config)
-        logging_utils.log_prefixed_fields_full(
-            "LLM_PROMPT",
-            ("STAGE", stage),
-            ("SYSTEM_PROMPT", self._trim_prompt_for_log(system_prompt)),
-            ("USER_PROMPT", self._trim_prompt_for_log(user_prompt)),
-        )
-
-    @staticmethod
-    def _extract_last_user_prompt(contents: list[dict]) -> str:
-        for item in reversed(contents):
-            if not isinstance(item, dict):
-                continue
-            if item.get("role") != "user":
-                continue
-            parts = item.get("parts")
-            if not isinstance(parts, list):
-                continue
-            text_parts: list[str] = []
-            for part in parts:
-                if not isinstance(part, dict):
-                    continue
-                text = part.get("text")
-                if isinstance(text, str) and text:
-                    text_parts.append(text)
-            if text_parts:
-                return "\n\n".join(text_parts)
-        return ""
-
-    @staticmethod
-    def _extract_system_prompt(config: Optional[dict]) -> str:
-        if not isinstance(config, dict):
-            return ""
-        value = config.get("systemInstruction")
-        if isinstance(value, str):
-            return value
-        return ""
 
     @staticmethod
     def _trim_prompt_for_log(value: str) -> str:
