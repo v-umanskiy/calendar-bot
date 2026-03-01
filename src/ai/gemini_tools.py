@@ -23,55 +23,42 @@ EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "Only call the tool when you can provide normalized RFC3339 values."
 )
 
-EVENT_DRAFT_TOOL_CONFIG = {
-    "systemInstruction": EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION,
-    "tools": [
-        {
-            "functionDeclarations": [
-                {
-                    "name": EVENT_DRAFT_TOOL_NAME,
-                    "description": (
-                        "Upsert the active event draft for the current chat. "
-                        "Call it whenever the user wants to add or modify draft event details."
-                    ),
-                    "parameters": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "start": {"type": "STRING"},
-                            "end": {"type": "STRING"},
-                            "title": {"type": "STRING"},
-                        },
+EVENT_DRAFT_TOOLS = [
+    {
+        "functionDeclarations": [
+            {
+                "name": EVENT_DRAFT_TOOL_NAME,
+                "description": (
+                    "Upsert the active event draft for the current chat. "
+                    "Call it whenever the user wants to add or modify draft event details."
+                ),
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "start": {"type": "STRING"},
+                        "end": {"type": "STRING"},
+                        "title": {"type": "STRING"},
                     },
                 },
-                {
-                    "name": NEW_EVENT_DRAFT_TOOL_NAME,
-                    "description": (
-                        "Create a new event draft for the current chat by replacing the existing one. "
-                        "Call it when the user pivots to a different event."
-                    ),
-                    "parameters": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "start": {"type": "STRING"},
-                            "end": {"type": "STRING"},
-                            "title": {"type": "STRING"},
-                        },
+            },
+            {
+                "name": NEW_EVENT_DRAFT_TOOL_NAME,
+                "description": (
+                    "Create a new event draft for the current chat by replacing the existing one. "
+                    "Call it when the user pivots to a different event."
+                ),
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "start": {"type": "STRING"},
+                        "end": {"type": "STRING"},
+                        "title": {"type": "STRING"},
                     },
                 },
-            ]
-        }
-    ],
-}
-
-
-def build_event_draft_tool_config(extra_system_instruction: str | None = None) -> dict:
-    system_instruction = EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION
-    if extra_system_instruction:
-        system_instruction = f"{system_instruction}\n\n{extra_system_instruction.strip()}"
-    return {
-        "systemInstruction": system_instruction,
-        "tools": EVENT_DRAFT_TOOL_CONFIG["tools"],
+            },
+        ]
     }
+]
 
 
 def execute_function_calls(function_calls: list[dict], chat_id: Optional[str]) -> list[dict]:

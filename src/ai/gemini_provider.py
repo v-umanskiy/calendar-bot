@@ -76,7 +76,7 @@ class GeminiProvider(ModelProvider):
 
         tool_config = {
             "systemInstruction": system_instruction,
-            "tools": gemini_tools.EVENT_DRAFT_TOOL_CONFIG["tools"],
+            "tools": gemini_tools.EVENT_DRAFT_TOOLS,
         }
         response = self._client.models.generate_content(
             model=self._model_name,
