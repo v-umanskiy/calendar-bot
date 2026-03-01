@@ -38,7 +38,13 @@ class GeminiProvider(ModelProvider):
     ) -> str:
         gemini_history = self._convert_history(history)
         try:
-            return await self._call_with_text(prompt or "", history, gemini_history, chat_id=chat_id)
+            logging_utils.log_prefixed_fields(
+                "Calling Gemini.",
+                ("PROMPT", prompt),
+                ("HISTORY", history),
+            )
+            contents = self._build_contents(gemini_history, [{"text": prompt}])
+            return await asyncio.to_thread(self._run_with_tools, contents, chat_id)
         except (
             google_api_exceptions.ResourceExhausted,
             google_api_exceptions.TooManyRequests,
@@ -48,30 +54,6 @@ class GeminiProvider(ModelProvider):
         except Exception as exc:
             print("GEMINI_CALL_ERROR:", repr(exc))
             return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
-
-    async def _call_with_text(
-        self,
-        prompt: str,
-        raw_history: Optional[ModelHistory],
-        gemini_history: list[dict],
-        *,
-        chat_id: Optional[str],
-    ) -> str:
-        self._log_call(prompt, raw_history)
-        contents = self._build_contents(gemini_history, [{"text": prompt}])
-        response, _ = await asyncio.to_thread(self._run_with_tools, contents, chat_id)
-        return response
-
-    def _log_call(
-        self,
-        prompt: Optional[str],
-        history: Optional[ModelHistory],
-    ) -> None:
-        logging_utils.log_prefixed_fields(
-            "Calling Gemini.",
-            ("PROMPT", prompt),
-            ("HISTORY", history),
-        )
 
     def _run_with_tools(
         self,
@@ -85,13 +67,12 @@ class GeminiProvider(ModelProvider):
             contents=contents,
             config=tool_config,
         )
-        usage = self._extract_usage(response)
         function_calls = gemini_tools.extract_function_calls(response)
         if not function_calls:
-            return response.text or "No response", usage
+            return response.text or "No response"
         if len(function_calls) > 1:
             print("GEMINI_TOOL_VALIDATION_ERROR: expected at most one function call")
-            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE, usage
+            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
 
         function_results = gemini_tools.execute_function_calls(function_calls, chat_id)
         event_draft_result = gemini_tools.find_event_draft_result(function_results)
@@ -110,7 +91,7 @@ class GeminiProvider(ModelProvider):
             if not missing_required and not invalid_fields:
                 draft = event_draft_result.get("draft") or {}
                 if chat_id is None:
-                    return MODEL_PROVIDER_UNAVAILABLE_MESSAGE, usage
+                    return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
                 create_result = asyncio.run(
                     google_calendar_service.create_primary_event(
                         str(chat_id),
@@ -121,8 +102,8 @@ class GeminiProvider(ModelProvider):
                 )
                 if not create_result.get("ok"):
                     if create_result.get("error") in {"reconnect_required", "not_connected", "missing_access_token"}:
-                        return EVENT_RECONNECT_REQUIRED_MESSAGE, usage
-                    return EVENT_SAVE_FAILED_MESSAGE, usage
+                        return EVENT_RECONNECT_REQUIRED_MESSAGE
+                    return EVENT_SAVE_FAILED_MESSAGE
                 summary = EVENT_SAVE_SUCCESS_MESSAGE_TEMPLATE.format(
                     title=str(draft.get("title") or ""),
                     start=str(draft.get("start") or ""),
@@ -132,7 +113,7 @@ class GeminiProvider(ModelProvider):
                     summary,
                     str(create_result.get("calendar_id") or "primary"),
                     str(create_result.get("google_event_id") or ""),
-                ), usage
+                )
             if invalid_fields:
                 follow_up_contents = self._build_invalid_follow_up_contents(contents, function_results)
                 self._log_prompts(follow_up_contents, config=None, stage="invalid_follow_up")
@@ -142,7 +123,7 @@ class GeminiProvider(ModelProvider):
                 )
                 follow_up_text = follow_up_response.text or ""
                 if follow_up_text:
-                    return follow_up_text, usage
+                    return follow_up_text
             elif missing_required:
                 follow_up_contents = self._build_missing_follow_up_contents(contents, function_results)
                 self._log_prompts(follow_up_contents, config=None, stage="missing_follow_up")
@@ -152,7 +133,7 @@ class GeminiProvider(ModelProvider):
                 )
                 follow_up_text = follow_up_response.text or ""
                 if follow_up_text:
-                    return follow_up_text, usage
+                    return follow_up_text
 
         fallback_contents = self._build_missing_follow_up_contents(contents, function_results)
         self._log_prompts(fallback_contents, config=None, stage="fallback_follow_up")
@@ -162,8 +143,8 @@ class GeminiProvider(ModelProvider):
         )
         follow_up_text = follow_up_response.text or ""
         if follow_up_text:
-            return follow_up_text, usage
-        return response.text or "No response", usage
+            return follow_up_text
+        return response.text or "No response"
 
     def _repair_invalid_result_if_needed(
         self,
@@ -289,28 +270,6 @@ class GeminiProvider(ModelProvider):
         updated_contents = list(contents)
         updated_contents.append({"role": "user", "parts": [{"text": follow_up_instruction}]})
         return updated_contents
-
-    @staticmethod
-    def _extract_usage(response) -> Optional[dict]:
-        usage_metadata = getattr(response, "usage_metadata", None)
-        if not usage_metadata:
-            return None
-        if isinstance(usage_metadata, dict):
-            prompt_tokens = usage_metadata.get("prompt_token_count")
-            completion_tokens = usage_metadata.get("candidates_token_count")
-            total_tokens = usage_metadata.get("total_token_count")
-        else:
-            prompt_tokens = getattr(usage_metadata, "prompt_token_count", None)
-            completion_tokens = getattr(usage_metadata, "candidates_token_count", None)
-            total_tokens = getattr(usage_metadata, "total_token_count", None)
-        usage = {}
-        if prompt_tokens is not None:
-            usage["prompt_tokens"] = prompt_tokens
-        if completion_tokens is not None:
-            usage["completion_tokens"] = completion_tokens
-        if total_tokens is not None:
-            usage["total_tokens"] = total_tokens
-        return usage or None
 
     def _build_contents(self, history: list[dict], parts: list[dict]) -> list[dict]:
         contents = list(history)
