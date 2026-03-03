@@ -213,6 +213,6 @@ async def delete_event(chat_id: str, *, calendar_id: str, google_event_id: str) 
 
     if ok:
         return {"ok": True}
-    if status_code == 404:
+    if status_code in {404, 410}:
         return {"ok": False, "error": "not_found"}
     return {"ok": False, "error": "delete_failed"}
