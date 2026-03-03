@@ -10,6 +10,6 @@ async def handle_text_message(chat_id: str, text: str, is_transcribed: bool, his
     prompt = text
     if is_transcribed:
         prompt = TRANSCRIBED_VOICE_PROMPT_TEMPLATE.format(message=text)
-    reply = await model_provider.generate_reply(prompt, history, chat_id=chat_id)
+    reply = await model_provider.generate_reply(prompt=prompt, chat_id=chat_id, history=history)
 
     return reply

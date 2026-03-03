@@ -33,8 +33,8 @@ class GeminiProvider(ModelProvider):
     async def generate_reply(
         self,
         prompt: str,
+        chat_id: str,
         history: Optional[ModelHistory] = None,
-        chat_id: Optional[str] = None,
     ) -> str:
         gemini_history = self._convert_history(history)
         contents = self._build_contents(gemini_history, [{"text": prompt}])
@@ -59,7 +59,7 @@ class GeminiProvider(ModelProvider):
     def _run_with_tools(
         self,
         contents: list[dict],
-        chat_id: Optional[str],
+        chat_id: str,
         prompt: str,
         raw_history: Optional[ModelHistory],
     ) -> str:
@@ -88,8 +88,6 @@ class GeminiProvider(ModelProvider):
             return response.text or "No response"
         if len(function_calls) > 1:
             print("GEMINI_TOOL_VALIDATION_ERROR: expected at most one function call")
-            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
-        if chat_id is None:
             return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
 
         function_result = self._execute_tool_lifecycle(

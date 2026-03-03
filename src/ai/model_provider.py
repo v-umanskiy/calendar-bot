@@ -10,8 +10,8 @@ class ModelProvider(ABC):
     async def generate_reply(
         self,
         prompt: str,
+        chat_id: str,
         history: Optional[ModelHistory] = None,
-        chat_id: Optional[str] = None,
     ) -> str:
         raise NotImplementedError
 
