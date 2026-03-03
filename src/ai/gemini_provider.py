@@ -15,6 +15,7 @@ from src.utils.constants import (
 )
 from .model_provider import ModelProvider, ModelHistory
 from . import gemini_tools
+from . import gemini_tool_executor
 from src.services import secret_service
 from src.services import google_calendar_service
 from src.utils import datetime_utils
@@ -114,7 +115,7 @@ class GeminiProvider(ModelProvider):
     ) -> dict:
         function_result = {
             "name": function_call.get("name"),
-            "result": gemini_tools.execute_tool_call(function_call, chat_id),
+            "result": gemini_tool_executor.execute_tool_call(function_call, chat_id),
         }
         result = function_result.get("result")
         if isinstance(result, dict) and result.get("ok"):
@@ -211,7 +212,7 @@ class GeminiProvider(ModelProvider):
 
             current_result = {
                 "name": repair_calls[0].get("name"),
-                "result": gemini_tools.execute_tool_call(repair_calls[0], chat_id),
+                "result": gemini_tool_executor.execute_tool_call(repair_calls[0], chat_id),
             }
             if not current_result.get("result") or not current_result.get("result").get("ok"):
                 break
