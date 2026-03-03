@@ -10,6 +10,7 @@ from src.utils.constants import (
     EVENT_CREATED_REPLY_PREFIX,
     EVENT_REMOVE_CALLBACK_DATA,
     EVENT_REMOVED_MESSAGE,
+    EVENT_NOT_FOUND_MESSAGE,
     UNSUPPORTED_INPUT_MESSAGE,
 )
 
@@ -213,6 +214,7 @@ def test_handle_callback_query_remove_event_happy_path(monkeypatch):
     delete_link_mock = AsyncMock()
     clear_markup_mock = AsyncMock()
     send_message_mock = AsyncMock()
+    save_turn_mock = AsyncMock()
 
     monkeypatch.setattr(message_handlers.telegram_service, "answer_callback_query", answer_mock)
     monkeypatch.setattr(message_handlers.google_event_links_table_service, "get_event_link", get_link_mock)
@@ -220,6 +222,7 @@ def test_handle_callback_query_remove_event_happy_path(monkeypatch):
     monkeypatch.setattr(message_handlers.google_event_links_table_service, "delete_event_link", delete_link_mock)
     monkeypatch.setattr(message_handlers.telegram_service, "clear_message_reply_markup", clear_markup_mock)
     monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+    monkeypatch.setattr(message_handlers.history_table_service, "save_turn", save_turn_mock)
 
     asyncio.run(message_handlers.handle_callback_query(callback_query))
 
@@ -229,6 +232,51 @@ def test_handle_callback_query_remove_event_happy_path(monkeypatch):
     delete_link_mock.assert_awaited_once_with("chat-111", 42)
     clear_markup_mock.assert_awaited_once_with("chat-111", 42)
     send_message_mock.assert_awaited_once_with("chat-111", EVENT_REMOVED_MESSAGE)
+    assert save_turn_mock.await_args_list == [
+        call("chat-111", "user", "User attempted to remove the event."),
+        call("chat-111", "assistant", EVENT_REMOVED_MESSAGE),
+    ]
+
+
+def test_handle_callback_query_remove_event_not_found(monkeypatch):
+    callback_query = {
+        "id": "cb-2",
+        "data": EVENT_REMOVE_CALLBACK_DATA,
+        "message": {
+            "chat": {"id": "chat-111"},
+            "message_id": 42,
+        },
+        "from": {"id": "chat-111"},
+    }
+
+    answer_mock = AsyncMock()
+    get_link_mock = AsyncMock(return_value={"calendar_id": "primary", "google_event_id": "evt-1"})
+    delete_event_mock = AsyncMock(return_value={"ok": False, "error": "not_found"})
+    delete_link_mock = AsyncMock()
+    clear_markup_mock = AsyncMock()
+    send_message_mock = AsyncMock()
+    save_turn_mock = AsyncMock()
+
+    monkeypatch.setattr(message_handlers.telegram_service, "answer_callback_query", answer_mock)
+    monkeypatch.setattr(message_handlers.google_event_links_table_service, "get_event_link", get_link_mock)
+    monkeypatch.setattr(message_handlers.google_calendar_service, "delete_event", delete_event_mock)
+    monkeypatch.setattr(message_handlers.google_event_links_table_service, "delete_event_link", delete_link_mock)
+    monkeypatch.setattr(message_handlers.telegram_service, "clear_message_reply_markup", clear_markup_mock)
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+    monkeypatch.setattr(message_handlers.history_table_service, "save_turn", save_turn_mock)
+
+    asyncio.run(message_handlers.handle_callback_query(callback_query))
+
+    answer_mock.assert_awaited_once_with("cb-2")
+    get_link_mock.assert_awaited_once_with("chat-111", 42)
+    delete_event_mock.assert_awaited_once_with("chat-111", calendar_id="primary", google_event_id="evt-1")
+    delete_link_mock.assert_awaited_once_with("chat-111", 42)
+    clear_markup_mock.assert_awaited_once_with("chat-111", 42)
+    send_message_mock.assert_awaited_once_with("chat-111", EVENT_NOT_FOUND_MESSAGE)
+    assert save_turn_mock.await_args_list == [
+        call("chat-111", "user", "User attempted to remove the event."),
+        call("chat-111", "assistant", EVENT_NOT_FOUND_MESSAGE),
+    ]
 
 
 def test_handle_unsupported_message_mentions_text_and_voice_only(monkeypatch):

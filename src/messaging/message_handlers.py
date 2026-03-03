@@ -163,24 +163,35 @@ async def handle_callback_query(callback_query: dict):
     if data == EVENT_REMOVE_CALLBACK_DATA:
         chat_id = message["chat"]["id"]
         message_id = message["message_id"]
+        await history_table_service.save_turn(chat_id, "user", "User attempted to remove the event.")
         link = await google_event_links_table_service.get_event_link(chat_id, message_id)
         if not isinstance(link, dict):
             await telegram_service.send_message(chat_id, EVENT_NOT_FOUND_MESSAGE)
+            await history_table_service.save_turn(chat_id, "assistant", EVENT_NOT_FOUND_MESSAGE)
             return
         delete_result = await google_calendar_service.delete_event(
             str(chat_id),
             calendar_id=str(link.get("calendar_id") or "primary"),
             google_event_id=str(link.get("google_event_id") or ""),
         )
-        if delete_result.get("ok") or delete_result.get("error") == "not_found":
+        if delete_result.get("ok"):
             await google_event_links_table_service.delete_event_link(chat_id, message_id)
             await telegram_service.clear_message_reply_markup(chat_id, message_id)
             await telegram_service.send_message(chat_id, EVENT_REMOVED_MESSAGE)
+            await history_table_service.save_turn(chat_id, "assistant", EVENT_REMOVED_MESSAGE)
+            return
+        if delete_result.get("error") == "not_found":
+            await google_event_links_table_service.delete_event_link(chat_id, message_id)
+            await telegram_service.clear_message_reply_markup(chat_id, message_id)
+            await telegram_service.send_message(chat_id, EVENT_NOT_FOUND_MESSAGE)
+            await history_table_service.save_turn(chat_id, "assistant", EVENT_NOT_FOUND_MESSAGE)
             return
         if delete_result.get("error") in {"reconnect_required", "not_connected", "missing_access_token"}:
             await telegram_service.send_message(chat_id, EVENT_RECONNECT_REQUIRED_MESSAGE)
+            await history_table_service.save_turn(chat_id, "assistant", EVENT_RECONNECT_REQUIRED_MESSAGE)
             return
         await telegram_service.send_message(chat_id, EVENT_REMOVE_FAILED_MESSAGE)
+        await history_table_service.save_turn(chat_id, "assistant", EVENT_REMOVE_FAILED_MESSAGE)
         return
 
     if data not in {
