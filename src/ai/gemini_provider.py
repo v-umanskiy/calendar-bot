@@ -213,8 +213,7 @@ class GeminiProvider(ModelProvider):
                 "name": repair_calls[0].get("name"),
                 "result": gemini_tools.execute_tool_call(repair_calls[0], chat_id),
             }
-            next_event_draft_result = current_result.get("result")
-            if not next_event_draft_result or not next_event_draft_result.get("ok"):
+            if not current_result.get("result") or not current_result.get("result").get("ok"):
                 break
 
         return current_result
