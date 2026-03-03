@@ -141,8 +141,7 @@ class GeminiProvider(ModelProvider):
         if not missing_required and not invalid_fields:
             return self._create_calendar_event(chat_id, event_draft_update_result.get("draft") or {})
         if invalid_fields:
-            follow_up_contents = self._build_invalid_follow_up_contents(contents, function_result)
-            return self._generate_follow_up_reply(follow_up_contents)
+            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
         if missing_required:
             follow_up_contents = self._build_missing_follow_up_contents(contents, function_result)
             return self._generate_follow_up_reply(follow_up_contents)
@@ -241,20 +240,6 @@ class GeminiProvider(ModelProvider):
             "If missing_required has entries, ask the user only for those missing mandatory fields.\n"
             "Be concise and ask only one focused follow-up question when possible.\n"
             "Do not mention internal tools."
-        )
-        updated_contents = list(contents)
-        updated_contents.append({"role": "user", "parts": [{"text": follow_up_instruction}]})
-        return updated_contents
-
-    @staticmethod
-    def _build_invalid_follow_up_contents(contents: list[dict], function_result: dict) -> list[dict]:
-        follow_up_instruction = (
-            "Tool calls were executed. Use this JSON result to continue the conversation:\n"
-            f"{gemini_tools.tool_results_to_json(function_result)}\n\n"
-            "invalid_fields are still present after normalization attempts.\n"
-            "Ask a neutral clarification question for explicit date/time.\n"
-            "Do not blame the user and do not mention internal tools.\n"
-            "Be concise and ask only one focused follow-up question."
         )
         updated_contents = list(contents)
         updated_contents.append({"role": "user", "parts": [{"text": follow_up_instruction}]})
