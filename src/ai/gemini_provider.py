@@ -89,6 +89,8 @@ class GeminiProvider(ModelProvider):
         if len(function_calls) > 1:
             print("GEMINI_TOOL_VALIDATION_ERROR: expected at most one function call")
             return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+        if chat_id is None:
+            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
 
         function_result = self._execute_tool_lifecycle(
             contents,
@@ -108,7 +110,7 @@ class GeminiProvider(ModelProvider):
     def _execute_tool_lifecycle(
         self,
         contents: list[dict],
-        chat_id: Optional[str],
+        chat_id: str,
         function_call: dict,
         tool_config: dict,
     ) -> dict:
@@ -128,7 +130,7 @@ class GeminiProvider(ModelProvider):
 
     def _resolve_tool_decision(
         self,
-        chat_id: Optional[str],
+        chat_id: str,
         contents: list[dict],
         function_result: dict,
     ) -> Optional[str]:
@@ -148,9 +150,7 @@ class GeminiProvider(ModelProvider):
             return self._generate_follow_up_reply(follow_up_contents)
         return None
 
-    def _create_calendar_event(self, chat_id: Optional[str], draft: dict) -> str:
-        if chat_id is None:
-            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+    def _create_calendar_event(self, chat_id: str, draft: dict) -> str:
         create_result = asyncio.run(
             google_calendar_service.create_primary_event(
                 str(chat_id),
@@ -187,7 +187,7 @@ class GeminiProvider(ModelProvider):
     def _repair_invalid_result_if_needed(
         self,
         contents: list[dict],
-        chat_id: Optional[str],
+        chat_id: str,
         function_result: dict,
         tool_config: dict,
     ) -> dict:

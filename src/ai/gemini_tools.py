@@ -61,26 +61,10 @@ EVENT_DRAFT_TOOLS = [
 ]
 
 
-def execute_function_calls(function_calls: list[dict], chat_id: Optional[str]) -> list[dict]:
-    results: list[dict] = []
-    for function_call in function_calls:
-        result = execute_tool_call(function_call, chat_id)
-        results.append(
-            {
-                "name": function_call["name"],
-                "result": result,
-            }
-        )
-    return results
-
-
-def execute_tool_call(function_call: dict, chat_id: Optional[str]) -> dict:
+def execute_tool_call(function_call: dict, chat_id: str) -> dict:
     function_name = function_call["name"]
     if function_name not in {EVENT_DRAFT_TOOL_NAME, NEW_EVENT_DRAFT_TOOL_NAME}:
         return {"ok": False, "error": "unsupported_function"}
-
-    if chat_id is None:
-        return {"ok": False, "error": "missing_chat_id"}
 
     args = function_call.get("args") or {}
     if not isinstance(args, dict):
