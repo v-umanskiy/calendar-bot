@@ -52,6 +52,29 @@ def test_execute_tool_call_routes_to_replace_for_new_event(monkeypatch):
     upsert_mock.assert_not_awaited()
 
 
+def test_execute_tool_call_routes_to_event_lookup(monkeypatch):
+    search_mock = AsyncMock(return_value={"ok": True, "events": []})
+    monkeypatch.setattr(gemini_tool_executor.google_calendar_service, "search_primary_events", search_mock)
+
+    result = gemini_tool_executor.execute_tool_call(
+        {
+            "name": gemini_tools.EVENT_LOOKUP_TOOL_NAME,
+            "args": {
+                "start": "2026-03-04T00:00:00+01:00",
+                "end": "2026-03-05T00:00:00+01:00",
+            },
+        },
+        "123",
+    )
+
+    assert result == {"ok": True, "events": []}
+    search_mock.assert_awaited_once_with(
+        "123",
+        start="2026-03-04T00:00:00+01:00",
+        end="2026-03-05T00:00:00+01:00",
+    )
+
+
 def test_build_complete_draft_summary_for_new_event_action():
     text = gemini_tools.build_complete_draft_summary(
         {

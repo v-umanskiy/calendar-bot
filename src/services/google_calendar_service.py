@@ -2,11 +2,13 @@ from datetime import date, datetime, time, timedelta, timezone
 
 import httpx
 
+from src.utils import datetime_utils
 from src.utils import logging_utils
 from . import google_oauth_token_service
 
 
 GOOGLE_CALENDAR_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+EVENT_LOOKUP_LIMIT = 20
 
 
 def _parse_target_date(date_input: str | None) -> tuple[date | None, str | None]:
@@ -36,17 +38,19 @@ def _format_event_line(item: dict) -> str:
     return f"- {title}"
 
 
-async def _list_events(access_token: str, target_date: date) -> tuple[bool, int, dict]:
-    day_start = datetime.combine(target_date, time.min, tzinfo=timezone.utc)
-    day_end = day_start + timedelta(days=1)
-
-    headers = {"Authorization": f"Bearer {access_token}"}
+async def _list_events_in_range(
+    access_token: str,
+    *,
+    time_min: datetime,
+    time_max: datetime,
+) -> tuple[bool, int, dict]:
     params = {
-        "timeMin": day_start.isoformat().replace("+00:00", "Z"),
-        "timeMax": day_end.isoformat().replace("+00:00", "Z"),
+        "timeMin": time_min.isoformat().replace("+00:00", "Z"),
+        "timeMax": time_max.isoformat().replace("+00:00", "Z"),
         "singleEvents": "true",
         "orderBy": "startTime",
     }
+    headers = {"Authorization": f"Bearer {access_token}"}
     async with httpx.AsyncClient(timeout=10) as client:
         try:
             response = await client.get(
@@ -62,6 +66,18 @@ async def _list_events(access_token: str, target_date: date) -> tuple[bool, int,
     except Exception:
         payload = {"raw": response.text}
     return response.is_success, response.status_code, payload if isinstance(payload, dict) else {}
+
+
+def _extract_event_bounds(item: dict) -> tuple[str | None, str | None]:
+    start = item.get("start") if isinstance(item, dict) else {}
+    end = item.get("end") if isinstance(item, dict) else {}
+    start_dt = start.get("dateTime") if isinstance(start, dict) else None
+    end_dt = end.get("dateTime") if isinstance(end, dict) else None
+    if isinstance(start_dt, str) and isinstance(end_dt, str):
+        return start_dt, end_dt
+    start_date = start.get("date") if isinstance(start, dict) else None
+    end_date = end.get("date") if isinstance(end, dict) else None
+    return start_date if isinstance(start_date, str) else None, end_date if isinstance(end_date, str) else None
 
 
 async def _insert_event(
@@ -123,12 +139,22 @@ async def list_primary_events_for_date(chat_id: str, date_input: str | None = No
             return "Google Calendar is not connected. Use /connect first."
         return "Could not access Google Calendar right now. Please try again."
 
-    ok, status_code, payload = await _list_events(str(token_result["access_token"]), target_date)
+    day_start = datetime.combine(target_date, time.min, tzinfo=timezone.utc)
+    day_end = day_start + timedelta(days=1)
+    ok, status_code, payload = await _list_events_in_range(
+        str(token_result["access_token"]),
+        time_min=day_start,
+        time_max=day_end,
+    )
     if not ok and status_code == 401:
         refreshed = await google_oauth_token_service.get_valid_access_token(str(chat_id), force_refresh=True)
         if not refreshed.get("ok"):
             return "Google Calendar authorization expired. Use /connect to reconnect."
-        ok, status_code, payload = await _list_events(str(refreshed["access_token"]), target_date)
+        ok, status_code, payload = await _list_events_in_range(
+            str(refreshed["access_token"]),
+            time_min=day_start,
+            time_max=day_end,
+        )
 
     if not ok:
         logging_utils.log_prefixed_fields(
@@ -148,6 +174,74 @@ async def list_primary_events_for_date(chat_id: str, date_input: str | None = No
     for item in items[:20]:
         lines.append(_format_event_line(item if isinstance(item, dict) else {}))
     return "\n".join(lines)
+
+
+async def search_primary_events(
+    chat_id: str,
+    *,
+    start: str | None = None,
+    end: str | None = None,
+) -> dict:
+    parsed_start = datetime_utils.parse_rfc3339_datetime_utc(start)
+    parsed_end = datetime_utils.parse_rfc3339_datetime_utc(end)
+    if parsed_start is None or parsed_end is None:
+        return {"ok": False, "error": "invalid_time_range"}
+    if parsed_end <= parsed_start:
+        return {"ok": False, "error": "invalid_time_range"}
+
+    token_result = await google_oauth_token_service.get_valid_access_token(str(chat_id))
+    if not token_result.get("ok"):
+        return {"ok": False, "error": token_result.get("error")}
+
+    ok, status_code, payload = await _list_events_in_range(
+        str(token_result["access_token"]),
+        time_min=parsed_start,
+        time_max=parsed_end,
+    )
+    if not ok and status_code == 401:
+        refreshed = await google_oauth_token_service.get_valid_access_token(str(chat_id), force_refresh=True)
+        if not refreshed.get("ok"):
+            return {"ok": False, "error": "reconnect_required"}
+        ok, status_code, payload = await _list_events_in_range(
+            str(refreshed["access_token"]),
+            time_min=parsed_start,
+            time_max=parsed_end,
+        )
+
+    if not ok:
+        logging_utils.log_prefixed_fields(
+            "GOOGLE_CALENDAR_EVENTS_SEARCH_ERROR",
+            ("chat_id", chat_id),
+            ("status_code", status_code),
+            ("error", payload.get("error") if isinstance(payload, dict) else "unknown"),
+        )
+        return {"ok": False, "error": "search_failed"}
+
+    items = payload.get("items") if isinstance(payload, dict) else []
+    items = items if isinstance(items, list) else []
+
+    events: list[dict] = []
+    for item in items:
+        current = item if isinstance(item, dict) else {}
+        start_value, end_value = _extract_event_bounds(current)
+        events.append(
+            {
+                "calendar_id": "primary",
+                "google_event_id": str(current.get("id") or ""),
+                "title": str(current.get("summary") or "(no title)"),
+                "start": start_value,
+                "end": end_value,
+            }
+        )
+        if len(events) >= EVENT_LOOKUP_LIMIT:
+            break
+
+    return {
+        "ok": True,
+        "range_label": f"{parsed_start.isoformat()} to {parsed_end.isoformat()}",
+        "events": events,
+        "has_more": len(items) > EVENT_LOOKUP_LIMIT,
+    }
 
 
 async def create_primary_event(chat_id: str, *, title: str, start: str, end: str) -> dict:

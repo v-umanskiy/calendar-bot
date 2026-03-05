@@ -74,6 +74,15 @@ def _resolve_tool_decision(
     contents: list[dict],
     function_result: dict,
 ) -> Optional[str]:
+    function_name = str(function_result.get("name") or "")
+    if function_name == gemini_tools.EVENT_LOOKUP_TOOL_NAME:
+        follow_up_contents = _build_lookup_follow_up_contents(contents, function_result)
+        return _generate_follow_up_reply(
+            client=client,
+            model_name=model_name,
+            follow_up_contents=follow_up_contents,
+        ) or MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+
     event_draft_update_result = function_result.get("result")
     if not isinstance(event_draft_update_result, dict) or not event_draft_update_result.get("ok"):
         return None
@@ -188,6 +197,20 @@ def _build_missing_follow_up_contents(contents: list[dict], function_result: dic
         f"{gemini_tools.tool_results_to_json(function_result)}\n\n"
         "If missing_required has entries, ask the user only for those missing mandatory fields.\n"
         "Be concise and ask only one focused follow-up question when possible.\n"
+        "Do not mention internal tools."
+    )
+    updated_contents = list(contents)
+    updated_contents.append({"role": "user", "parts": [{"text": follow_up_instruction}]})
+    return updated_contents
+
+
+def _build_lookup_follow_up_contents(contents: list[dict], function_result: dict) -> list[dict]:
+    follow_up_instruction = (
+        "Tool calls were executed. Use this JSON result to answer the user's request:\n"
+        f"{gemini_tools.tool_results_to_json(function_result)}\n\n"
+        "Answer naturally and directly.\n"
+        "If there are no events, state that clearly and optionally suggest creating one.\n"
+        "If there are multiple events, summarize the most relevant options concisely.\n"
         "Do not mention internal tools."
     )
     updated_contents = list(contents)

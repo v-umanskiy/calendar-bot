@@ -6,6 +6,7 @@ from src.utils.constants import EVENT_CREATED_REPLY_PREFIX
 
 EVENT_DRAFT_TOOL_NAME = "upsert_event_draft"
 NEW_EVENT_DRAFT_TOOL_NAME = "create_new_event_draft"
+EVENT_LOOKUP_TOOL_NAME = "find_calendar_events"
 EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "You are a calendar assistant. "
     "If a user asks unrelated questions, briefly decline and redirect to calendar help. "
@@ -18,12 +19,30 @@ EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "For start/end, provide RFC3339 datetime without timezone offset (example: 2026-02-24T15:30:00). "
     "If date/time is ambiguous or incomplete, ask a clarifying question first and do not call the tool yet. "
     "Examples that require clarification before tool call: 'at 6', 'tomorrow evening', 'next Friday morning'. "
-    "Only call the tool when you can provide normalized RFC3339 values."
+    "Only call the tool when you can provide normalized RFC3339 values. "
+    "If the user asks about existing events (including move/reschedule/edit requests), "
+    "call find_calendar_events first to look up relevant events and then advise the user. "
+    "For find_calendar_events, always provide start and end in RFC3339 format. "
+    "Do not claim that edits were made when no edit tool was called."
 )
 
 EVENT_DRAFT_TOOLS = [
     {
         "functionDeclarations": [
+            {
+                "name": EVENT_LOOKUP_TOOL_NAME,
+                "description": (
+                    "Find existing calendar events in Google Calendar. "
+                    "Use when user asks what events exist, or asks to move/edit an existing event."
+                ),
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "start": {"type": "STRING"},
+                        "end": {"type": "STRING"},
+                    },
+                },
+            },
             {
                 "name": EVENT_DRAFT_TOOL_NAME,
                 "description": (

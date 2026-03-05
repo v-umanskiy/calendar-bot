@@ -1,13 +1,18 @@
 import asyncio
 
 from src.services import event_draft_table_service
+from src.services import google_calendar_service
 
 from . import gemini_tools
 
 
 def execute_tool_call(function_call: dict, chat_id: str) -> dict:
     function_name = function_call["name"]
-    if function_name not in {gemini_tools.EVENT_DRAFT_TOOL_NAME, gemini_tools.NEW_EVENT_DRAFT_TOOL_NAME}:
+    if function_name not in {
+        gemini_tools.EVENT_DRAFT_TOOL_NAME,
+        gemini_tools.NEW_EVENT_DRAFT_TOOL_NAME,
+        gemini_tools.EVENT_LOOKUP_TOOL_NAME,
+    }:
         return {"ok": False, "error": "unsupported_function"}
 
     args = function_call.get("args") or {}
@@ -30,6 +35,14 @@ def execute_tool_call(function_call: dict, chat_id: str) -> dict:
                     start=normalized_start,
                     end=normalized_end,
                     title=normalized_title,
+                )
+            )
+        if function_name == gemini_tools.EVENT_LOOKUP_TOOL_NAME:
+            return asyncio.run(
+                google_calendar_service.search_primary_events(
+                    str(normalized_chat_id),
+                    start=normalized_start,
+                    end=normalized_end,
                 )
             )
         return asyncio.run(
