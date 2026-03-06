@@ -58,7 +58,7 @@ def test_execute_tool_call_routes_to_event_lookup(monkeypatch):
 
     result = gemini_tool_executor.execute_tool_call(
         {
-            "name": gemini_tools.EVENT_LOOKUP_TOOL_NAME,
+            "name": gemini_tools.EVENT_LOOKUP_BY_DATE_RANGE_TOOL_NAME,
             "args": {
                 "start": "2026-03-04T00:00:00+01:00",
                 "end": "2026-03-05T00:00:00+01:00",
@@ -72,6 +72,27 @@ def test_execute_tool_call_routes_to_event_lookup(monkeypatch):
         "123",
         start="2026-03-04T00:00:00+01:00",
         end="2026-03-05T00:00:00+01:00",
+    )
+
+
+def test_execute_tool_call_routes_to_query_lookup_tool(monkeypatch):
+    search_mock = AsyncMock(return_value={"ok": True, "events": []})
+    monkeypatch.setattr(gemini_tool_executor.google_calendar_service, "search_primary_events_by_query", search_mock)
+
+    result = gemini_tool_executor.execute_tool_call(
+        {
+            "name": gemini_tools.EVENT_LOOKUP_BY_TITLE_TOOL_NAME,
+            "args": {
+                "query": "danang",
+            },
+        },
+        "123",
+    )
+
+    assert result == {"ok": True, "events": []}
+    search_mock.assert_awaited_once_with(
+        "123",
+        query="danang",
     )
 
 

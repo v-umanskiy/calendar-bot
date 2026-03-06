@@ -75,7 +75,10 @@ def _resolve_tool_decision(
     function_result: dict,
 ) -> Optional[str]:
     function_name = str(function_result.get("name") or "")
-    if function_name == gemini_tools.EVENT_LOOKUP_TOOL_NAME:
+    if function_name in {
+        gemini_tools.EVENT_LOOKUP_BY_DATE_RANGE_TOOL_NAME,
+        gemini_tools.EVENT_LOOKUP_BY_TITLE_TOOL_NAME,
+    }:
         follow_up_contents = _build_lookup_follow_up_contents(contents, function_result)
         return _generate_follow_up_reply(
             client=client,

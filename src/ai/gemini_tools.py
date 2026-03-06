@@ -6,7 +6,8 @@ from src.utils.constants import EVENT_CREATED_REPLY_PREFIX
 
 EVENT_DRAFT_TOOL_NAME = "upsert_event_draft"
 NEW_EVENT_DRAFT_TOOL_NAME = "create_new_event_draft"
-EVENT_LOOKUP_TOOL_NAME = "find_calendar_events"
+EVENT_LOOKUP_BY_DATE_RANGE_TOOL_NAME = "find_calendar_events_by_date_range"
+EVENT_LOOKUP_BY_TITLE_TOOL_NAME = "find_calendar_events_by_title"
 EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "You are a calendar assistant. "
     "If a user asks unrelated questions, briefly decline and redirect to calendar help. "
@@ -21,8 +22,10 @@ EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "Examples that require clarification before tool call: 'at 6', 'tomorrow evening', 'next Friday morning'. "
     "Only call the tool when you can provide normalized RFC3339 values. "
     "If the user asks about existing events (including move/reschedule/edit requests), "
-    "call find_calendar_events first to look up relevant events and then advise the user. "
-    "For find_calendar_events, always provide start and end in RFC3339 format. "
+    "use find_calendar_events_by_date_range when time boundaries are available, "
+    "and use find_calendar_events_by_title when they are not. "
+    "For find_calendar_events_by_date_range, provide start and end in RFC3339 format. "
+    "For find_calendar_events_by_title.query, prefer one word; use two words only in rare cases. "
     "Do not claim that edits were made when no edit tool was called."
 )
 
@@ -30,16 +33,27 @@ EVENT_DRAFT_TOOLS = [
     {
         "functionDeclarations": [
             {
-                "name": EVENT_LOOKUP_TOOL_NAME,
+                "name": EVENT_LOOKUP_BY_DATE_RANGE_TOOL_NAME,
                 "description": (
-                    "Find existing calendar events in Google Calendar. "
-                    "Use when user asks what events exist, or asks to move/edit an existing event."
+                    "Find existing calendar events in Google Calendar using explicit start/end bounds."
                 ),
                 "parameters": {
                     "type": "OBJECT",
                     "properties": {
                         "start": {"type": "STRING"},
                         "end": {"type": "STRING"},
+                    },
+                },
+            },
+            {
+                "name": EVENT_LOOKUP_BY_TITLE_TOOL_NAME,
+                "description": (
+                    "Find existing calendar events in Google Calendar by text query when time boundaries are unknown."
+                ),
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "query": {"type": "STRING"},
                     },
                 },
             },
