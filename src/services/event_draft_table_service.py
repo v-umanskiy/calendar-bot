@@ -1,9 +1,12 @@
 from datetime import datetime, timedelta
+import uuid
 
 from src.utils import logging_utils
 from src.repository import event_draft_repository
 
 MANDATORY_FIELDS = ("title", "start")
+MODE_CREATE = "create"
+MODE_EDIT = "edit"
 
 
 def _is_non_blank(value) -> bool:
@@ -225,6 +228,9 @@ async def upsert_event_draft(
             "error": "no_fields_provided",
         }
 
+    fields["mode"] = MODE_CREATE
+    fields["draft_revision"] = str(uuid.uuid4())
+
     logging_utils.log_prefixed_message_full(
         "Upserting event draft",
         {"chat_id": str(chat_id), "fields": fields},
@@ -235,6 +241,8 @@ async def upsert_event_draft(
         "title": attributes.get("title"),
         "start": attributes.get("start"),
         "end": attributes.get("end"),
+        "mode": attributes.get("mode"),
+        "draft_revision": attributes.get("draft_revision"),
     }
     missing_required, invalid_fields = _validate_draft(draft)
     return {
@@ -268,12 +276,17 @@ async def replace_event_draft(
     if title is not None:
         item["title"] = title
 
+    item["mode"] = MODE_CREATE
+    item["draft_revision"] = str(uuid.uuid4())
+
     logging_utils.log_prefixed_message_full("Replacing event draft", item)
     await event_draft_repository.replace_draft_item(item)
     draft = {
         "title": item.get("title"),
         "start": item.get("start"),
         "end": item.get("end"),
+        "mode": item.get("mode"),
+        "draft_revision": item.get("draft_revision"),
     }
     missing_required, invalid_fields = _validate_draft(draft)
     return {

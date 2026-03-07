@@ -1,5 +1,7 @@
 import asyncio
 from datetime import timedelta, timezone
+import uuid
+from unittest.mock import ANY
 from unittest.mock import AsyncMock
 
 from src.services import event_draft_table_service
@@ -74,6 +76,8 @@ def test_upsert_event_draft_persists_blank_start_and_reports_missing_after_save(
         {
             "start": "   ",
             "title": "Dinner",
+            "mode": "create",
+            "draft_revision": ANY,
         },
     )
 
@@ -138,6 +142,8 @@ def test_upsert_event_draft_defaults_end_to_start_plus_one_hour(monkeypatch):
             "start": "2026-02-24T10:00:00+03:00",
             "end": "2026-02-24T11:00:00+03:00",
             "title": "Sync",
+            "mode": "create",
+            "draft_revision": ANY,
         },
     )
     assert result["ok"] is True
@@ -167,6 +173,8 @@ def test_replace_event_draft_defaults_end_to_start_plus_one_hour(monkeypatch):
             "start": "2026-02-24T10:00:00+03:00",
             "end": "2026-02-24T11:00:00+03:00",
             "title": "Fresh event",
+            "mode": "create",
+            "draft_revision": ANY,
         }
     )
     assert result["ok"] is True
@@ -232,6 +240,39 @@ def test_upsert_event_draft_normalizes_offsetless_datetime_to_server_timezone(mo
             "start": "2026-03-05T17:00:00+03:00",
             "end": "2026-03-05T18:00:00+03:00",
             "title": "Therms",
+            "mode": "create",
+            "draft_revision": ANY,
         },
     )
     assert result["ok"] is True
+
+
+def test_upsert_event_draft_refreshes_draft_revision_on_each_persist(monkeypatch):
+    _set_server_tz(monkeypatch, 3)
+    upsert_mock = AsyncMock(return_value={"Attributes": {}})
+    monkeypatch.setattr(
+        event_draft_table_service.event_draft_repository,
+        "upsert_draft_fields",
+        upsert_mock,
+    )
+
+    asyncio.run(
+        event_draft_table_service.upsert_event_draft(
+            chat_id=123,
+            start="2026-03-05T17:00:00+03:00",
+            title="Therms",
+        )
+    )
+    asyncio.run(
+        event_draft_table_service.upsert_event_draft(
+            chat_id=123,
+            start="2026-03-05T18:00:00+03:00",
+            title="Therms",
+        )
+    )
+
+    first_revision = upsert_mock.await_args_list[0].args[1]["draft_revision"]
+    second_revision = upsert_mock.await_args_list[1].args[1]["draft_revision"]
+    assert first_revision != second_revision
+    assert str(uuid.UUID(first_revision)) == first_revision
+    assert str(uuid.UUID(second_revision)) == second_revision
