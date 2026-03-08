@@ -18,6 +18,14 @@ async def delete_draft(chat_id: str):
     )
 
 
+async def get_draft(chat_id: str) -> dict | None:
+    response = await asyncio.to_thread(
+        event_draft_table.get_item,
+        Key={"chat_id": chat_id},
+    )
+    return response.get("Item")
+
+
 async def upsert_draft_fields(chat_id: str, fields: dict):
     expression_attribute_names = {}
     expression_attribute_values = {}

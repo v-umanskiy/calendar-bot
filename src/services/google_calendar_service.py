@@ -198,6 +198,26 @@ async def _delete_event(
     return response.is_success, response.status_code
 
 
+async def _get_primary_event(
+    access_token: str,
+    *,
+    google_event_id: str,
+) -> tuple[bool, int, dict]:
+    headers = {"Authorization": f"Bearer {access_token}"}
+    url = f"{GOOGLE_CALENDAR_EVENTS_URL}/{google_event_id}"
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            response = await client.get(url, headers=headers)
+        except Exception as exc:
+            return False, 0, {"error": "event_get_request_failed", "detail": repr(exc)}
+
+    try:
+        payload = response.json()
+    except Exception:
+        payload = {"raw": response.text}
+    return response.is_success, response.status_code, payload if isinstance(payload, dict) else {}
+
+
 async def list_primary_events_for_date(chat_id: str, date_input: str | None = None) -> str:
     target_date, parse_error = _parse_target_date(date_input)
     if parse_error:
@@ -328,6 +348,47 @@ async def create_primary_event(chat_id: str, *, title: str, start: str, end: str
         "calendar_id": "primary",
         "google_event_id": str(event_id),
         "html_link": payload.get("htmlLink"),
+    }
+
+
+async def get_primary_event_by_id(chat_id: str, *, google_event_id: str) -> dict:
+    token_result = await google_oauth_token_service.get_valid_access_token(str(chat_id))
+    if not token_result.get("ok"):
+        return {"ok": False, "error": token_result.get("error")}
+
+    ok, status_code, payload = await _get_primary_event(
+        str(token_result["access_token"]),
+        google_event_id=google_event_id,
+    )
+    if not ok and status_code == 401:
+        refreshed = await google_oauth_token_service.get_valid_access_token(str(chat_id), force_refresh=True)
+        if not refreshed.get("ok"):
+            return {"ok": False, "error": "reconnect_required"}
+        ok, status_code, payload = await _get_primary_event(
+            str(refreshed["access_token"]),
+            google_event_id=google_event_id,
+        )
+
+    if not ok:
+        if status_code in {404, 410}:
+            return {"ok": False, "error": "not_found"}
+        logging_utils.log_prefixed_fields(
+            "GOOGLE_CALENDAR_EVENT_GET_ERROR",
+            ("chat_id", chat_id),
+            ("status_code", status_code),
+            ("error", payload.get("error")),
+        )
+        return {"ok": False, "error": "get_failed"}
+
+    start, end = _extract_event_bounds(payload)
+    return {
+        "ok": True,
+        "event": {
+            "google_event_id": str(payload.get("id") or ""),
+            "title": str(payload.get("summary") or "(no title)"),
+            "start": start,
+            "end": end,
+        },
     }
 
 

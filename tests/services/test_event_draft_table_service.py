@@ -276,3 +276,17 @@ def test_upsert_event_draft_refreshes_draft_revision_on_each_persist(monkeypatch
     assert first_revision != second_revision
     assert str(uuid.UUID(first_revision)) == first_revision
     assert str(uuid.UUID(second_revision)) == second_revision
+
+
+def test_load_event_draft_delegates_to_repository(monkeypatch):
+    get_mock = AsyncMock(return_value={"chat_id": "123", "title": "Planning"})
+    monkeypatch.setattr(
+        event_draft_table_service.event_draft_repository,
+        "get_draft",
+        get_mock,
+    )
+
+    result = asyncio.run(event_draft_table_service.load_event_draft(123))
+
+    assert result == {"chat_id": "123", "title": "Planning"}
+    get_mock.assert_awaited_once_with("123")

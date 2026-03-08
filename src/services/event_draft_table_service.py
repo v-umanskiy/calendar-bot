@@ -299,3 +299,7 @@ async def replace_event_draft(
 
 async def delete_event_draft(chat_id: int):
     return await event_draft_repository.delete_draft(str(chat_id))
+
+
+async def load_event_draft(chat_id: int | str) -> dict | None:
+    return await event_draft_repository.get_draft(str(chat_id))

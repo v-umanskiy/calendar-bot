@@ -116,3 +116,58 @@ def test_search_primary_events_fills_missing_start_with_30_days(monkeypatch):
     assert (kwargs["time_max"] - kwargs["time_min"]) == timedelta(
         days=google_calendar_service.EVENT_LOOKUP_ONE_SIDED_DAYS
     )
+
+
+def test_get_primary_event_by_id_maps_datetime_event(monkeypatch):
+    token_mock = AsyncMock(return_value={"ok": True, "access_token": "token-1"})
+    get_mock = AsyncMock(
+        return_value=(
+            True,
+            200,
+            {
+                "id": "evt-1",
+                "summary": "Planning",
+                "start": {"dateTime": "2026-03-05T10:00:00+00:00"},
+                "end": {"dateTime": "2026-03-05T11:00:00+00:00"},
+            },
+        )
+    )
+
+    monkeypatch.setattr(google_calendar_service.google_oauth_token_service, "get_valid_access_token", token_mock)
+    monkeypatch.setattr(google_calendar_service, "_get_primary_event", get_mock)
+
+    result = asyncio.run(
+        google_calendar_service.get_primary_event_by_id(
+            "chat-111",
+            google_event_id="evt-1",
+        )
+    )
+
+    assert result == {
+        "ok": True,
+        "event": {
+            "google_event_id": "evt-1",
+            "title": "Planning",
+            "start": "2026-03-05T10:00:00+00:00",
+            "end": "2026-03-05T11:00:00+00:00",
+        },
+    }
+    token_mock.assert_awaited_once_with("chat-111")
+    get_mock.assert_awaited_once_with("token-1", google_event_id="evt-1")
+
+
+def test_get_primary_event_by_id_returns_not_found(monkeypatch):
+    token_mock = AsyncMock(return_value={"ok": True, "access_token": "token-1"})
+    get_mock = AsyncMock(return_value=(False, 404, {"error": {"message": "not found"}}))
+
+    monkeypatch.setattr(google_calendar_service.google_oauth_token_service, "get_valid_access_token", token_mock)
+    monkeypatch.setattr(google_calendar_service, "_get_primary_event", get_mock)
+
+    result = asyncio.run(
+        google_calendar_service.get_primary_event_by_id(
+            "chat-111",
+            google_event_id="evt-1",
+        )
+    )
+
+    assert result == {"ok": False, "error": "not_found"}
