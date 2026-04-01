@@ -4,9 +4,6 @@ from typing import Optional
 from . import gemini_tool_executor
 from . import gemini_tools
 from src.services import google_calendar_service
-from src.services import event_draft_table_service
-from src.services import event_preview_formatter
-from src.services import telegram_service
 from src.utils.constants import (
     MODEL_PROVIDER_UNAVAILABLE_MESSAGE,
     EVENT_SAVE_SUCCESS_MESSAGE_TEMPLATE,
@@ -15,34 +12,6 @@ from src.utils.constants import (
 )
 
 MAX_INVALID_REPAIR_ATTEMPTS = 2
-
-
-async def preview_primary_event_edit(chat_id: str, google_event_id: str) -> dict:
-    event_result = await google_calendar_service.get_primary_event_by_id(
-        str(chat_id),
-        google_event_id=str(google_event_id),
-    )
-    if not event_result.get("ok"):
-        error = event_result.get("error")
-        if error == "not_found":
-            message = "Event not found in Google Calendar."
-        elif error in {"reconnect_required", "not_connected", "missing_access_token"}:
-            message = EVENT_RECONNECT_REQUIRED_MESSAGE
-        else:
-            message = "Could not load event details from Google Calendar right now."
-        await telegram_service.send_message(chat_id, message)
-        return {"ok": False, "error": error or "preview_failed", "message": message}
-
-    draft = await event_draft_table_service.load_event_draft(chat_id)
-    preview_text = event_preview_formatter.build_event_edit_preview_text(event_result.get("event") or {}, draft)
-    sent = await telegram_service.send_message(chat_id, preview_text)
-    message_id = sent.get("message_id") if isinstance(sent, dict) else None
-    return {
-        "ok": True,
-        "google_event_id": str(google_event_id),
-        "preview": preview_text,
-        "message_id": message_id,
-    }
 
 
 def call_tool_and_build_reply(
@@ -116,6 +85,11 @@ def _resolve_tool_decision(
             model_name=model_name,
             follow_up_contents=follow_up_contents,
         ) or MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+
+    if function_name == gemini_tools.EVENT_EDIT_PREVIEW_TOOL_NAME:
+        preview_result = function_result.get("result") or {}
+        text = preview_result.get("preview") if preview_result.get("ok") else preview_result.get("message")
+        return text or MODEL_PROVIDER_UNAVAILABLE_MESSAGE
 
     event_draft_update_result = function_result.get("result")
     if not isinstance(event_draft_update_result, dict) or not event_draft_update_result.get("ok"):

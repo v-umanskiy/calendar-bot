@@ -8,6 +8,7 @@ EVENT_DRAFT_TOOL_NAME = "upsert_event_draft"
 NEW_EVENT_DRAFT_TOOL_NAME = "create_new_event_draft"
 EVENT_LOOKUP_BY_DATE_RANGE_TOOL_NAME = "find_calendar_events_by_date_range"
 EVENT_LOOKUP_BY_TITLE_TOOL_NAME = "find_calendar_events_by_title"
+EVENT_EDIT_PREVIEW_TOOL_NAME = "prepare_event_edit"
 EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "You are a calendar assistant. "
     "If a user asks unrelated questions, briefly decline and redirect to calendar help. "
@@ -26,6 +27,10 @@ EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "and use find_calendar_events_by_title when they are not. "
     "For find_calendar_events_by_date_range, provide start and end in RFC3339 format. "
     "For find_calendar_events_by_title.query, prefer one word; use two words only in rare cases. "
+    "Edit flow: first call upsert_event_draft with requested changed fields (title/start/end). "
+    "Then identify the target event via lookup tools. "
+    "If exactly one event is identified, call prepare_event_edit with google_event_id. "
+    "If event match is ambiguous or missing, ask a clarification question and do not call prepare_event_edit yet. "
     "Do not claim that edits were made when no edit tool was called."
 )
 
@@ -54,6 +59,19 @@ EVENT_DRAFT_TOOLS = [
                     "type": "OBJECT",
                     "properties": {
                         "query": {"type": "STRING"},
+                    },
+                },
+            },
+            {
+                "name": EVENT_EDIT_PREVIEW_TOOL_NAME,
+                "description": (
+                    "Prepare an edit preview for an existing calendar event after the event was identified. "
+                    "Uses current draft values as pending changes."
+                ),
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "google_event_id": {"type": "STRING"},
                     },
                 },
             },
