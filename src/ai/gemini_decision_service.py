@@ -4,6 +4,7 @@ from typing import Optional
 from . import gemini_tool_executor
 from . import gemini_tools
 from src.services import google_calendar_service
+from src.utils import logging_utils
 from src.utils.constants import (
     MODEL_PROVIDER_UNAVAILABLE_MESSAGE,
     EVENT_SAVE_SUCCESS_MESSAGE_TEMPLATE,
@@ -169,8 +170,21 @@ def _repair_invalid_result_if_needed(
         repair_calls = gemini_tools.extract_function_calls(repair_response)
         if not repair_calls:
             break
+        repair_tool_names = [str(call.get("name") or "") for call in repair_calls]
+        logging_utils.log_prefixed_fields(
+            "GEMINI_REPAIR_TOOL_CALLS",
+            ("chat_id", chat_id),
+            ("count", len(repair_calls)),
+            ("names", repair_tool_names),
+        )
         if len(repair_calls) > 1:
-            print("GEMINI_TOOL_VALIDATION_ERROR: expected at most one repair function call")
+            logging_utils.log_prefixed_fields(
+                "GEMINI_TOOL_VALIDATION_ERROR",
+                ("chat_id", chat_id),
+                ("count", len(repair_calls)),
+                ("names", repair_tool_names),
+                ("detail", "expected at most one repair function call"),
+            )
             break
 
         current_result = {

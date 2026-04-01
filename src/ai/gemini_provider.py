@@ -80,8 +80,21 @@ class GeminiProvider(ModelProvider):
         function_calls = gemini_tools.extract_function_calls(response)
         if not function_calls:
             return response.text or "No response"
+        tool_names = [str(call.get("name") or "") for call in function_calls]
+        logging_utils.log_prefixed_fields(
+            "GEMINI_TOOL_CALLS",
+            ("chat_id", chat_id),
+            ("count", len(function_calls)),
+            ("names", tool_names),
+        )
         if len(function_calls) > 1:
-            print("GEMINI_TOOL_VALIDATION_ERROR: expected at most one function call")
+            logging_utils.log_prefixed_fields(
+                "GEMINI_TOOL_VALIDATION_ERROR",
+                ("chat_id", chat_id),
+                ("count", len(function_calls)),
+                ("names", tool_names),
+                ("detail", "expected at most one function call"),
+            )
             return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
 
         reply = gemini_decision_service.call_tool_and_build_reply(
