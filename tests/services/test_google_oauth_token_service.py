@@ -140,3 +140,78 @@ def test_get_valid_access_token_requires_reconnect_when_no_refresh_token(monkeyp
     result = asyncio.run(google_oauth_token_service.get_valid_access_token("123"))
 
     assert result == {"ok": False, "error": "reconnect_required"}
+
+
+def test_persist_oauth_tokens_preserves_existing_timezone(monkeypatch):
+    get_connection_mock = AsyncMock(return_value={"refresh_token_enc": "enc_old_refresh", "timezone": "Europe/Berlin"})
+    put_connection_mock = AsyncMock()
+
+    monkeypatch.setattr(
+        google_oauth_token_service.google_oauth_repository,
+        "get_connection",
+        get_connection_mock,
+    )
+    monkeypatch.setattr(
+        google_oauth_token_service.google_oauth_repository,
+        "put_connection",
+        put_connection_mock,
+    )
+    monkeypatch.setattr(
+        google_oauth_token_service,
+        "_encrypt_value",
+        AsyncMock(return_value="enc_access_new"),
+    )
+
+    result = asyncio.run(
+        google_oauth_token_service.persist_oauth_tokens(
+            "123",
+            {
+                "access_token": "access-new",
+                "scope": "scope-y",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+            },
+        )
+    )
+
+    assert result["ok"] is True
+    saved = put_connection_mock.await_args.args[0]
+    assert saved["timezone"] == "Europe/Berlin"
+
+
+def test_persist_oauth_tokens_uses_provided_timezone(monkeypatch):
+    get_connection_mock = AsyncMock(return_value={"refresh_token_enc": "enc_old_refresh", "timezone": "Europe/Berlin"})
+    put_connection_mock = AsyncMock()
+
+    monkeypatch.setattr(
+        google_oauth_token_service.google_oauth_repository,
+        "get_connection",
+        get_connection_mock,
+    )
+    monkeypatch.setattr(
+        google_oauth_token_service.google_oauth_repository,
+        "put_connection",
+        put_connection_mock,
+    )
+    monkeypatch.setattr(
+        google_oauth_token_service,
+        "_encrypt_value",
+        AsyncMock(return_value="enc_access_new"),
+    )
+
+    result = asyncio.run(
+        google_oauth_token_service.persist_oauth_tokens(
+            "123",
+            {
+                "access_token": "access-new",
+                "scope": "scope-y",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+            },
+            timezone="UTC",
+        )
+    )
+
+    assert result["ok"] is True
+    saved = put_connection_mock.await_args.args[0]
+    assert saved["timezone"] == "UTC"

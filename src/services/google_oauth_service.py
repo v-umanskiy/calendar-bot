@@ -12,10 +12,13 @@ import httpx
 from src.utils import logging_utils
 from . import secret_service
 from . import google_oauth_token_service
+from . import telegram_service
 
 
 GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_PRIMARY_CALENDAR_URL = "https://www.googleapis.com/calendar/v3/calendars/primary"
+GOOGLE_PRIMARY_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 DEFAULT_GOOGLE_OAUTH_SCOPE = "https://www.googleapis.com/auth/calendar.events"
 STATE_TTL_SECONDS = 600
 
@@ -124,6 +127,43 @@ async def exchange_code_for_tokens(code: str) -> tuple[bool, dict]:
     return True, data
 
 
+async def _resolve_primary_events_list_timezone(access_token: str) -> str | None:
+    headers = {"Authorization": f"Bearer {access_token}"}
+    params = {
+        "maxResults": "1",
+        "singleEvents": "true",
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            response = await client.get(
+                GOOGLE_PRIMARY_EVENTS_URL,
+                headers=headers,
+                params=params,
+            )
+        except Exception as exc:
+            logging_utils.log_prefixed_fields(
+                "GOOGLE_PRIMARY_EVENTS_TIMEZONE_REQUEST_ERROR",
+                ("error", repr(exc)),
+            )
+            return None
+
+    if not response.is_success:
+        logging_utils.log_http_result("GOOGLE_PRIMARY_EVENTS_TIMEZONE_RESPONSE", response)
+        return None
+
+    try:
+        payload = response.json()
+    except Exception:
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+    timezone_name = payload.get("timeZone")
+    if not isinstance(timezone_name, str) or not timezone_name.strip():
+        return None
+    return timezone_name.strip()
+
+
 async def process_oauth_callback(
     *,
     code: str | None,
@@ -179,7 +219,29 @@ async def process_oauth_callback(
         )
         return 502, "<h3>Google Calendar connection failed</h3><p>Token exchange failed. Please try /connect again.</p>"
 
-    persist_result = await google_oauth_token_service.persist_oauth_tokens(str(chat_id), result)
+    resolved_timezone: str | None = None
+    access_token = result.get("access_token")
+    if isinstance(access_token, str) and access_token.strip():
+        resolved_timezone = await _resolve_primary_events_list_timezone(access_token.strip())
+        if not resolved_timezone:
+            logging_utils.log_prefixed_fields(
+                "GOOGLE_OAUTH_TIMEZONE_NOT_RESOLVED",
+                ("correlation_id", correlation_id),
+                ("chat_id", chat_id),
+            )
+    else:
+        logging_utils.log_prefixed_fields(
+            "GOOGLE_OAUTH_TIMEZONE_NOT_RESOLVED",
+            ("correlation_id", correlation_id),
+            ("chat_id", chat_id),
+            ("reason", "missing_access_token_in_exchange_payload"),
+        )
+
+    persist_result = await google_oauth_token_service.persist_oauth_tokens(
+        str(chat_id),
+        result,
+        timezone=resolved_timezone,
+    )
     if not persist_result.get("ok"):
         logging_utils.log_prefixed_fields(
             "GOOGLE_OAUTH_TOKEN_PERSIST_ERROR",
@@ -188,6 +250,21 @@ async def process_oauth_callback(
             ("error", persist_result.get("error")),
         )
         return 500, "<h3>Google Calendar connection failed</h3><p>Could not store tokens. Please try /connect again.</p>"
+
+    telegram_chat_id: str | int = str(chat_id)
+    if isinstance(chat_id, str):
+        normalized_chat_id = chat_id.strip()
+        if normalized_chat_id and normalized_chat_id.lstrip("-").isdigit():
+            telegram_chat_id = int(normalized_chat_id)
+    try:
+        await telegram_service.send_message(telegram_chat_id, "Google Calendar connected.")
+    except Exception as exc:
+        logging_utils.log_prefixed_fields(
+            "GOOGLE_OAUTH_TELEGRAM_NOTIFY_ERROR",
+            ("correlation_id", correlation_id),
+            ("chat_id", chat_id),
+            ("error", repr(exc)),
+        )
 
     logging_utils.log_prefixed_fields(
         "GOOGLE_OAUTH_TOKEN_EXCHANGE_SUCCESS",

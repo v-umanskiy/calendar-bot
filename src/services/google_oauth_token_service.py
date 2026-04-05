@@ -52,7 +52,7 @@ async def _decrypt_value(value: str, chat_id: str) -> str:
     return plaintext.decode("utf-8")
 
 
-async def persist_oauth_tokens(chat_id: str, token_response: dict) -> dict:
+async def persist_oauth_tokens(chat_id: str, token_response: dict, *, timezone: str | None = None) -> dict:
     existing_item = await google_oauth_repository.get_connection(chat_id)
     existing_item = existing_item if isinstance(existing_item, dict) else {}
 
@@ -81,6 +81,7 @@ async def persist_oauth_tokens(chat_id: str, token_response: dict) -> dict:
         "expires_in": expires_in,
         "updated_at": int(time.time()),
     }
+    item["timezone"] = timezone if timezone is not None else existing_item.get("timezone")
     if refresh_token_enc:
         item["refresh_token_enc"] = refresh_token_enc
 
