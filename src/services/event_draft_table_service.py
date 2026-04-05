@@ -1,8 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.utils import logging_utils
 from src.repository import event_draft_repository
+from src.repository import google_oauth_repository
 
 MANDATORY_FIELDS = ("title", "start")
 MODE_CREATE = "create"
@@ -37,8 +39,15 @@ def _build_validation_result(
     }
 
 
-def _get_server_tzinfo():
-    return datetime.now().astimezone().tzinfo
+async def _get_user_tzinfo(chat_id: int | str):
+    item = await google_oauth_repository.get_connection(str(chat_id))
+    timezone_name = item.get("timezone") if isinstance(item, dict) else None
+    if isinstance(timezone_name, str) and timezone_name.strip():
+        try:
+            return ZoneInfo(timezone_name.strip())
+        except ZoneInfoNotFoundError:
+            pass
+    return timezone.utc
 
 
 def _parse_rfc3339_datetime(value: str | None) -> datetime | None:
@@ -58,17 +67,16 @@ def _parse_rfc3339_datetime(value: str | None) -> datetime | None:
     return parsed
 
 
-def _normalize_to_server_timezone_iso(value: str | None) -> str | None:
+def _normalize_to_timezone_iso(value: str | None, tzinfo) -> str | None:
     parsed = _parse_rfc3339_datetime(value)
     if parsed is None:
         return None
-    server_tz = _get_server_tzinfo()
-    if server_tz is None:
+    if tzinfo is None:
         return None
     if parsed.tzinfo is None:
-        normalized = parsed.replace(tzinfo=server_tz)
+        normalized = parsed.replace(tzinfo=tzinfo)
     else:
-        normalized = parsed.astimezone(server_tz)
+        normalized = parsed.astimezone(tzinfo)
     return normalized.isoformat(timespec="seconds")
 
 
@@ -126,11 +134,12 @@ def _normalize_and_prevalidate_datetimes(
     title: str | None,
     start: str | None,
     end: str | None,
+    tzinfo,
 ) -> tuple[str | None, str | None, dict | None]:
     normalized_start = start
     start_dt = None
     if _is_non_blank(start):
-        normalized_start = _normalize_to_server_timezone_iso(start)
+        normalized_start = _normalize_to_timezone_iso(start, tzinfo)
         start_dt = _parse_rfc3339_datetime(normalized_start)
     if _is_non_blank(start) and start_dt is None:
         return normalized_start, end, _build_validation_result(
@@ -148,7 +157,7 @@ def _normalize_and_prevalidate_datetimes(
 
     normalized_end = end
     if _is_non_blank(end):
-        normalized_end = _normalize_to_server_timezone_iso(end)
+        normalized_end = _normalize_to_timezone_iso(end, tzinfo)
         if normalized_end is None:
             return normalized_start, normalized_end, _build_validation_result(
                 title=title,
@@ -204,10 +213,12 @@ async def upsert_event_draft(
     title: str | None = None,
     mode: str = MODE_CREATE,
 ):
+    user_tzinfo = await _get_user_tzinfo(chat_id)
     normalized_start, normalized_end, prevalidation_result = _normalize_and_prevalidate_datetimes(
         title=title,
         start=start,
         end=end,
+        tzinfo=user_tzinfo,
     )
     if prevalidation_result is not None:
         return prevalidation_result
@@ -262,10 +273,12 @@ async def replace_event_draft(
     end: str | None = None,
     title: str | None = None,
 ):
+    user_tzinfo = await _get_user_tzinfo(chat_id)
     normalized_start, normalized_end, prevalidation_result = _normalize_and_prevalidate_datetimes(
         title=title,
         start=start,
         end=end,
+        tzinfo=user_tzinfo,
     )
     if prevalidation_result is not None:
         return prevalidation_result

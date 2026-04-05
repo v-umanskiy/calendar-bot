@@ -7,16 +7,16 @@ from unittest.mock import AsyncMock
 from src.services import event_draft_table_service
 
 
-def _set_server_tz(monkeypatch, hours: int):
+def _set_user_tz(monkeypatch, hours: int):
     monkeypatch.setattr(
         event_draft_table_service,
-        "_get_server_tzinfo",
-        lambda: timezone(timedelta(hours=hours)),
+        "_get_user_tzinfo",
+        AsyncMock(return_value=timezone(timedelta(hours=hours))),
     )
 
 
 def test_upsert_event_draft_skips_db_on_invalid_start(monkeypatch):
-    _set_server_tz(monkeypatch, 3)
+    _set_user_tz(monkeypatch, 3)
     upsert_mock = AsyncMock()
     monkeypatch.setattr(
         event_draft_table_service.event_draft_repository,
@@ -44,7 +44,7 @@ def test_upsert_event_draft_skips_db_on_invalid_start(monkeypatch):
 
 
 def test_upsert_event_draft_persists_blank_start_and_reports_missing_after_save(monkeypatch):
-    _set_server_tz(monkeypatch, 3)
+    _set_user_tz(monkeypatch, 3)
     upsert_mock = AsyncMock(
         return_value={
             "Attributes": {
@@ -84,7 +84,7 @@ def test_upsert_event_draft_persists_blank_start_and_reports_missing_after_save(
 
 
 def test_upsert_event_draft_skips_db_on_invalid_end(monkeypatch):
-    _set_server_tz(monkeypatch, 3)
+    _set_user_tz(monkeypatch, 3)
     upsert_mock = AsyncMock()
     monkeypatch.setattr(
         event_draft_table_service.event_draft_repository,
@@ -113,7 +113,7 @@ def test_upsert_event_draft_skips_db_on_invalid_end(monkeypatch):
 
 
 def test_upsert_event_draft_defaults_end_to_start_plus_one_hour(monkeypatch):
-    _set_server_tz(monkeypatch, 3)
+    _set_user_tz(monkeypatch, 3)
     upsert_mock = AsyncMock(
         return_value={
             "Attributes": {
@@ -153,7 +153,7 @@ def test_upsert_event_draft_defaults_end_to_start_plus_one_hour(monkeypatch):
 
 
 def test_replace_event_draft_defaults_end_to_start_plus_one_hour(monkeypatch):
-    _set_server_tz(monkeypatch, 3)
+    _set_user_tz(monkeypatch, 3)
     replace_mock = AsyncMock(return_value={})
     monkeypatch.setattr(
         event_draft_table_service.event_draft_repository,
@@ -184,7 +184,7 @@ def test_replace_event_draft_defaults_end_to_start_plus_one_hour(monkeypatch):
 
 
 def test_replace_event_draft_skips_db_on_invalid_start(monkeypatch):
-    _set_server_tz(monkeypatch, 3)
+    _set_user_tz(monkeypatch, 3)
     replace_mock = AsyncMock()
     monkeypatch.setattr(
         event_draft_table_service.event_draft_repository,
@@ -211,8 +211,8 @@ def test_replace_event_draft_skips_db_on_invalid_start(monkeypatch):
     replace_mock.assert_not_awaited()
 
 
-def test_upsert_event_draft_normalizes_offsetless_datetime_to_server_timezone(monkeypatch):
-    _set_server_tz(monkeypatch, 3)
+def test_upsert_event_draft_normalizes_offsetless_datetime_to_user_timezone(monkeypatch):
+    _set_user_tz(monkeypatch, 3)
     upsert_mock = AsyncMock(
         return_value={
             "Attributes": {
@@ -251,7 +251,7 @@ def test_upsert_event_draft_normalizes_offsetless_datetime_to_server_timezone(mo
 
 
 def test_upsert_event_draft_refreshes_draft_revision_on_each_persist(monkeypatch):
-    _set_server_tz(monkeypatch, 3)
+    _set_user_tz(monkeypatch, 3)
     upsert_mock = AsyncMock(return_value={"Attributes": {}})
     monkeypatch.setattr(
         event_draft_table_service.event_draft_repository,
@@ -296,7 +296,7 @@ def test_load_event_draft_delegates_to_repository(monkeypatch):
 
 
 def test_upsert_event_edit_draft_persists_edit_mode(monkeypatch):
-    _set_server_tz(monkeypatch, 3)
+    _set_user_tz(monkeypatch, 3)
     upsert_mock = AsyncMock(
         return_value={
             "Attributes": {
@@ -328,7 +328,7 @@ def test_upsert_event_edit_draft_persists_edit_mode(monkeypatch):
 
 
 def test_upsert_event_edit_draft_does_not_require_title(monkeypatch):
-    _set_server_tz(monkeypatch, 3)
+    _set_user_tz(monkeypatch, 3)
     upsert_mock = AsyncMock(
         return_value={
             "Attributes": {
@@ -353,3 +353,31 @@ def test_upsert_event_edit_draft_does_not_require_title(monkeypatch):
     )
 
     assert result["missing_required"] == []
+
+
+def test_get_user_tzinfo_uses_oauth_timezone(monkeypatch):
+    get_connection_mock = AsyncMock(return_value={"timezone": "Europe/Berlin"})
+    monkeypatch.setattr(
+        event_draft_table_service.google_oauth_repository,
+        "get_connection",
+        get_connection_mock,
+    )
+
+    tzinfo = asyncio.run(event_draft_table_service._get_user_tzinfo("123"))
+
+    assert str(tzinfo) == "Europe/Berlin"
+    get_connection_mock.assert_awaited_once_with("123")
+
+
+def test_get_user_tzinfo_falls_back_to_utc_for_missing_timezone(monkeypatch):
+    get_connection_mock = AsyncMock(return_value={})
+    monkeypatch.setattr(
+        event_draft_table_service.google_oauth_repository,
+        "get_connection",
+        get_connection_mock,
+    )
+
+    tzinfo = asyncio.run(event_draft_table_service._get_user_tzinfo("123"))
+
+    assert tzinfo == timezone.utc
+    get_connection_mock.assert_awaited_once_with("123")
