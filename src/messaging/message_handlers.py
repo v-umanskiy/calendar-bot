@@ -124,7 +124,13 @@ async def _handle_message_codes(chat_id: str, text: str) -> str | None:
     stripped_text = text.strip()
 
     if stripped_text == "/start":
-        await telegram_service.send_message(chat_id, WELCOME_MESSAGE)
+        url = google_oauth_service.build_oauth_connect_url(chat_id)
+        reply_markup = {
+            "inline_keyboard": [
+                [{"text": GOOGLE_CONNECT_BUTTON_TEXT, "url": url}],
+            ]
+        }
+        await telegram_service.send_message_with_reply_markup(chat_id, WELCOME_MESSAGE, reply_markup)
         return WELCOME_MESSAGE
     if stripped_text == "/clear":
         await telegram_service.send_message_with_reply_markup(

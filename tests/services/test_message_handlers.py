@@ -108,15 +108,24 @@ def test_handle_text_message_raises_on_empty_text(monkeypatch):
 def test_handle_message_code_start(monkeypatch):
     chat_id = "chat-456"
     text = "/start"
+    connect_url = "https://accounts.google.com/o/oauth2/v2/auth?x=1"
 
-    send_message_mock = AsyncMock()
-    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+    build_url_mock = lambda _chat_id: connect_url
+    monkeypatch.setattr(message_handlers.google_oauth_service, "build_oauth_connect_url", build_url_mock)
+
+    send_with_markup_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message_with_reply_markup", send_with_markup_mock)
 
     save_turn_mock = AsyncMock()
     monkeypatch.setattr(message_handlers.history_table_service, "save_turn", save_turn_mock)
 
     asyncio.run(message_handlers.handle_text_message(chat_id, text))
-    send_message_mock.assert_awaited_once_with(chat_id, WELCOME_MESSAGE)
+    reply_markup = {
+        "inline_keyboard": [
+            [{"text": GOOGLE_CONNECT_BUTTON_TEXT, "url": connect_url}],
+        ]
+    }
+    send_with_markup_mock.assert_awaited_once_with(chat_id, WELCOME_MESSAGE, reply_markup)
     save_turn_mock.assert_not_awaited()
 
 
