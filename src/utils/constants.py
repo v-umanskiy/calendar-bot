@@ -36,10 +36,11 @@ CLEAR_HISTORY_MESSAGE = (
 
 HISTORY_CLEARED_MESSAGE = "Got it, the bot's history has been cleared."
 
-GOOGLE_CONNECT_MESSAGE_TEMPLATE = (
-    "Connect Google Calendar:\n{url}\n\n"
+GOOGLE_CONNECT_MESSAGE = (
+    "Connect Google Calendar.\n\n"
     "After authorization, return to this chat."
 )
+GOOGLE_CONNECT_BUTTON_TEXT = "Connect Google Calendar"
 EVENT_SAVE_SUCCESS_MESSAGE_TEMPLATE = (
     "Saved to Google Calendar.\n"
     "Title: {title}\n"

@@ -6,7 +6,8 @@ from tests.services import testing_helpers
 from src.messaging import message_handlers
 from src.utils.constants import (
     WELCOME_MESSAGE,
-    GOOGLE_CONNECT_MESSAGE_TEMPLATE,
+    GOOGLE_CONNECT_MESSAGE,
+    GOOGLE_CONNECT_BUTTON_TEXT,
     EVENT_CREATED_REPLY_PREFIX,
     EVENT_REMOVE_CALLBACK_DATA,
     EVENT_REMOVED_MESSAGE,
@@ -127,13 +128,18 @@ def test_handle_message_code_connect(monkeypatch):
     build_url_mock = lambda _chat_id: connect_url
     monkeypatch.setattr(message_handlers.google_oauth_service, "build_oauth_connect_url", build_url_mock)
 
-    send_message_mock = AsyncMock()
-    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+    send_with_markup_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message_with_reply_markup", send_with_markup_mock)
 
     asyncio.run(message_handlers.handle_text_message(chat_id, text))
 
-    expected = GOOGLE_CONNECT_MESSAGE_TEMPLATE.format(url=connect_url)
-    send_message_mock.assert_awaited_once_with(chat_id, expected)
+    expected = GOOGLE_CONNECT_MESSAGE
+    reply_markup = {
+        "inline_keyboard": [
+            [{"text": GOOGLE_CONNECT_BUTTON_TEXT, "url": connect_url}],
+        ]
+    }
+    send_with_markup_mock.assert_awaited_once_with(chat_id, expected, reply_markup)
 
 
 def test_handle_message_code_events(monkeypatch):

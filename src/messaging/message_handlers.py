@@ -20,7 +20,8 @@ from src.utils.constants import (
     WELCOME_MESSAGE,
     CLEAR_HISTORY_MESSAGE,
     HISTORY_CLEARED_MESSAGE,
-    GOOGLE_CONNECT_MESSAGE_TEMPLATE,
+    GOOGLE_CONNECT_MESSAGE,
+    GOOGLE_CONNECT_BUTTON_TEXT,
     UNSUPPORTED_INPUT_MESSAGE,
     EVENT_CREATED_REPLY_PREFIX,
     EVENT_REMOVE_BUTTON_TEXT,
@@ -134,9 +135,14 @@ async def _handle_message_codes(chat_id: str, text: str) -> str | None:
         return CLEAR_HISTORY_MESSAGE
     if stripped_text == "/connect":
         url = google_oauth_service.build_oauth_connect_url(chat_id)
-        message = GOOGLE_CONNECT_MESSAGE_TEMPLATE.format(url=url)
+        message = GOOGLE_CONNECT_MESSAGE
+        reply_markup = {
+            "inline_keyboard": [
+                [{"text": GOOGLE_CONNECT_BUTTON_TEXT, "url": url}],
+            ]
+        }
         logging_utils.log_prefixed_fields("GOOGLE_OAUTH_CONNECT_LINK_GENERATED", ("chat_id", chat_id))
-        await telegram_service.send_message(chat_id, message)
+        await telegram_service.send_message_with_reply_markup(chat_id, message, reply_markup)
         return message
     if stripped_text == "/events":
         message = await google_calendar_service.list_primary_events_for_date(chat_id)
