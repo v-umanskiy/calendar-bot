@@ -73,11 +73,13 @@ def _normalize_to_server_timezone_iso(value: str | None) -> str | None:
 
 
 def _validate_draft(draft: dict) -> tuple[list[str], list[dict]]:
+    mode = draft["mode"]
     missing_required: list[str] = []
-    for field in MANDATORY_FIELDS:
-        value = draft.get(field)
-        if value is None or (isinstance(value, str) and not value.strip()):
-            missing_required.append(field)
+    if mode == MODE_CREATE:
+        for field in MANDATORY_FIELDS:
+            value = draft.get(field)
+            if value is None or (isinstance(value, str) and not value.strip()):
+                missing_required.append(field)
 
     invalid_fields: list[dict] = []
 

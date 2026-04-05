@@ -51,6 +51,7 @@ def test_upsert_event_draft_persists_blank_start_and_reports_missing_after_save(
                 "title": "Dinner",
                 "start": "   ",
                 "end": None,
+                "mode": "create",
             }
         }
     )
@@ -119,6 +120,7 @@ def test_upsert_event_draft_defaults_end_to_start_plus_one_hour(monkeypatch):
                 "title": "Sync",
                 "start": "2026-02-24T10:00:00+03:00",
                 "end": "2026-02-24T11:00:00+03:00",
+                "mode": "create",
             }
         }
     )
@@ -217,6 +219,7 @@ def test_upsert_event_draft_normalizes_offsetless_datetime_to_server_timezone(mo
                 "title": "Therms",
                 "start": "2026-03-05T17:00:00+03:00",
                 "end": "2026-03-05T18:00:00+03:00",
+                "mode": "create",
             }
         }
     )
@@ -322,3 +325,31 @@ def test_upsert_event_edit_draft_persists_edit_mode(monkeypatch):
     saved_fields = upsert_mock.await_args.args[1]
     assert saved_fields["mode"] == "edit"
     assert result["draft"]["mode"] == "edit"
+
+
+def test_upsert_event_edit_draft_does_not_require_title(monkeypatch):
+    _set_server_tz(monkeypatch, 3)
+    upsert_mock = AsyncMock(
+        return_value={
+            "Attributes": {
+                "start": "2026-03-05T17:00:00+03:00",
+                "end": "2026-03-05T18:00:00+03:00",
+                "mode": "edit",
+                "draft_revision": "rev-1",
+            }
+        }
+    )
+    monkeypatch.setattr(
+        event_draft_table_service.event_draft_repository,
+        "upsert_draft_fields",
+        upsert_mock,
+    )
+
+    result = asyncio.run(
+        event_draft_table_service.upsert_event_edit_draft(
+            chat_id=123,
+            start="2026-03-05T17:00:00+03:00",
+        )
+    )
+
+    assert result["missing_required"] == []
