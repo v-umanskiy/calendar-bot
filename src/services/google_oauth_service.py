@@ -13,6 +13,7 @@ from src.utils import logging_utils
 from . import secret_service
 from . import google_oauth_token_service
 from . import telegram_service
+from . import history_table_service
 
 
 GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -256,8 +257,11 @@ async def process_oauth_callback(
         normalized_chat_id = chat_id.strip()
         if normalized_chat_id and normalized_chat_id.lstrip("-").isdigit():
             telegram_chat_id = int(normalized_chat_id)
+    connect_message = "Google Calendar connected."
     try:
-        await telegram_service.send_message(telegram_chat_id, "Google Calendar connected.")
+        sent = await telegram_service.send_message(telegram_chat_id, connect_message)
+        if sent is not None:
+            await history_table_service.save_turn(str(chat_id), "assistant", connect_message)
     except Exception as exc:
         logging_utils.log_prefixed_fields(
             "GOOGLE_OAUTH_TELEGRAM_NOTIFY_ERROR",
