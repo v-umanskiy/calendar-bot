@@ -96,10 +96,14 @@ def _resolve_tool_decision(
     if not isinstance(event_draft_update_result, dict) or not event_draft_update_result.get("ok"):
         return None
 
+    draft = event_draft_update_result["draft"]
+    draft_mode = draft.get("mode")
     missing_required = event_draft_update_result.get("missing_required") or []
     invalid_fields = event_draft_update_result.get("invalid_fields") or []
-    if not missing_required and not invalid_fields:
-        return _create_calendar_event(chat_id, event_draft_update_result.get("draft") or {})
+    if not missing_required and not invalid_fields and draft_mode == "create":
+        return _create_calendar_event(chat_id, draft)
+    if not missing_required and not invalid_fields and draft_mode == "edit":
+        return None
     if invalid_fields:
         return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
     if missing_required:

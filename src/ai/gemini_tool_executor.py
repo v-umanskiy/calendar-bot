@@ -11,6 +11,7 @@ def execute_tool_call(function_call: dict, chat_id: str) -> dict:
     function_name = function_call["name"]
     if function_name not in {
         gemini_tools.EVENT_DRAFT_TOOL_NAME,
+        gemini_tools.EVENT_EDIT_DRAFT_TOOL_NAME,
         gemini_tools.NEW_EVENT_DRAFT_TOOL_NAME,
         gemini_tools.EVENT_LOOKUP_BY_DATE_RANGE_TOOL_NAME,
         gemini_tools.EVENT_LOOKUP_BY_TITLE_TOOL_NAME,
@@ -38,6 +39,15 @@ def execute_tool_call(function_call: dict, chat_id: str) -> dict:
         if function_name == gemini_tools.EVENT_DRAFT_TOOL_NAME:
             return asyncio.run(
                 event_draft_table_service.upsert_event_draft(
+                    chat_id=normalized_chat_id,
+                    start=normalized_start,
+                    end=normalized_end,
+                    title=normalized_title,
+                )
+            )
+        if function_name == gemini_tools.EVENT_EDIT_DRAFT_TOOL_NAME:
+            return asyncio.run(
+                event_draft_table_service.upsert_event_edit_draft(
                     chat_id=normalized_chat_id,
                     start=normalized_start,
                     end=normalized_end,

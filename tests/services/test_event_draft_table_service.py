@@ -290,3 +290,35 @@ def test_load_event_draft_delegates_to_repository(monkeypatch):
 
     assert result == {"chat_id": "123", "title": "Planning"}
     get_mock.assert_awaited_once_with("123")
+
+
+def test_upsert_event_edit_draft_persists_edit_mode(monkeypatch):
+    _set_server_tz(monkeypatch, 3)
+    upsert_mock = AsyncMock(
+        return_value={
+            "Attributes": {
+                "title": "Edit title",
+                "start": "2026-03-05T17:00:00+03:00",
+                "end": "2026-03-05T18:00:00+03:00",
+                "mode": "edit",
+                "draft_revision": "rev-1",
+            }
+        }
+    )
+    monkeypatch.setattr(
+        event_draft_table_service.event_draft_repository,
+        "upsert_draft_fields",
+        upsert_mock,
+    )
+
+    result = asyncio.run(
+        event_draft_table_service.upsert_event_edit_draft(
+            chat_id=123,
+            start="2026-03-05T17:00:00+03:00",
+            title="Edit title",
+        )
+    )
+
+    saved_fields = upsert_mock.await_args.args[1]
+    assert saved_fields["mode"] == "edit"
+    assert result["draft"]["mode"] == "edit"

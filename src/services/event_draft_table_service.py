@@ -200,6 +200,7 @@ async def upsert_event_draft(
     start: str | None = None,
     end: str | None = None,
     title: str | None = None,
+    mode: str = MODE_CREATE,
 ):
     normalized_start, normalized_end, prevalidation_result = _normalize_and_prevalidate_datetimes(
         title=title,
@@ -228,7 +229,7 @@ async def upsert_event_draft(
             "error": "no_fields_provided",
         }
 
-    fields["mode"] = MODE_CREATE
+    fields["mode"] = mode
     fields["draft_revision"] = str(uuid.uuid4())
 
     logging_utils.log_prefixed_message_full(
@@ -303,3 +304,18 @@ async def delete_event_draft(chat_id: int):
 
 async def load_event_draft(chat_id: int | str) -> dict | None:
     return await event_draft_repository.get_draft(str(chat_id))
+
+
+async def upsert_event_edit_draft(
+    chat_id: int,
+    start: str | None = None,
+    end: str | None = None,
+    title: str | None = None,
+):
+    return await upsert_event_draft(
+        chat_id=chat_id,
+        start=start,
+        end=end,
+        title=title,
+        mode=MODE_EDIT,
+    )

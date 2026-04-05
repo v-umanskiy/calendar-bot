@@ -36,3 +36,31 @@ def test_resolve_tool_decision_returns_error_message_for_edit_preview_failure():
     )
 
     assert result == "Event not found in Google Calendar."
+
+
+def test_resolve_tool_decision_does_not_create_event_for_edit_mode(monkeypatch):
+    create_mock = lambda *_args, **_kwargs: "__EVENT_CREATED__:unexpected"
+    monkeypatch.setattr(gemini_decision_service, "_create_calendar_event", create_mock)
+
+    result = gemini_decision_service._resolve_tool_decision(
+        client=None,
+        model_name="unused",
+        chat_id="123",
+        contents=[],
+        function_result={
+            "name": gemini_tools.EVENT_EDIT_DRAFT_TOOL_NAME,
+            "result": {
+                "ok": True,
+                "draft": {
+                    "mode": "edit",
+                    "title": "Edited",
+                    "start": "2026-04-05T20:00:00+00:00",
+                    "end": "2026-04-05T21:00:00+00:00",
+                },
+                "missing_required": [],
+                "invalid_fields": [],
+            },
+        },
+    )
+
+    assert result is None

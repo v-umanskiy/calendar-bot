@@ -6,8 +6,10 @@ from src.ai import gemini_tool_executor
 
 def test_execute_tool_call_routes_to_upsert(monkeypatch):
     upsert_mock = AsyncMock(return_value={"ok": True})
+    edit_upsert_mock = AsyncMock(return_value={"ok": True})
     replace_mock = AsyncMock(return_value={"ok": True})
     monkeypatch.setattr(gemini_tool_executor.event_draft_table_service, "upsert_event_draft", upsert_mock)
+    monkeypatch.setattr(gemini_tool_executor.event_draft_table_service, "upsert_event_edit_draft", edit_upsert_mock)
     monkeypatch.setattr(gemini_tool_executor.event_draft_table_service, "replace_event_draft", replace_mock)
 
     result = gemini_tool_executor.execute_tool_call(
@@ -26,12 +28,15 @@ def test_execute_tool_call_routes_to_upsert(monkeypatch):
         title="Old",
     )
     replace_mock.assert_not_awaited()
+    edit_upsert_mock.assert_not_awaited()
 
 
 def test_execute_tool_call_routes_to_replace_for_new_event(monkeypatch):
     upsert_mock = AsyncMock(return_value={"ok": True})
+    edit_upsert_mock = AsyncMock(return_value={"ok": True})
     replace_mock = AsyncMock(return_value={"ok": True})
     monkeypatch.setattr(gemini_tool_executor.event_draft_table_service, "upsert_event_draft", upsert_mock)
+    monkeypatch.setattr(gemini_tool_executor.event_draft_table_service, "upsert_event_edit_draft", edit_upsert_mock)
     monkeypatch.setattr(gemini_tool_executor.event_draft_table_service, "replace_event_draft", replace_mock)
 
     result = gemini_tool_executor.execute_tool_call(
@@ -50,6 +55,34 @@ def test_execute_tool_call_routes_to_replace_for_new_event(monkeypatch):
         title="New",
     )
     upsert_mock.assert_not_awaited()
+    edit_upsert_mock.assert_not_awaited()
+
+
+def test_execute_tool_call_routes_to_edit_upsert(monkeypatch):
+    upsert_mock = AsyncMock(return_value={"ok": True})
+    edit_upsert_mock = AsyncMock(return_value={"ok": True})
+    replace_mock = AsyncMock(return_value={"ok": True})
+    monkeypatch.setattr(gemini_tool_executor.event_draft_table_service, "upsert_event_draft", upsert_mock)
+    monkeypatch.setattr(gemini_tool_executor.event_draft_table_service, "upsert_event_edit_draft", edit_upsert_mock)
+    monkeypatch.setattr(gemini_tool_executor.event_draft_table_service, "replace_event_draft", replace_mock)
+
+    result = gemini_tool_executor.execute_tool_call(
+        {
+            "name": gemini_tools.EVENT_EDIT_DRAFT_TOOL_NAME,
+            "args": {"title": "Edited", "start": "2026-02-24T10:00:00+03:00"},
+        },
+        "123",
+    )
+
+    assert result == {"ok": True}
+    edit_upsert_mock.assert_awaited_once_with(
+        chat_id=123,
+        start="2026-02-24T10:00:00+03:00",
+        end=None,
+        title="Edited",
+    )
+    upsert_mock.assert_not_awaited()
+    replace_mock.assert_not_awaited()
 
 
 def test_execute_tool_call_routes_to_event_lookup(monkeypatch):
