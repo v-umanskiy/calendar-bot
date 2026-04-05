@@ -164,6 +164,8 @@ class GeminiProvider(ModelProvider):
                     )
                     if not reply:
                         continue
+                    if str(tool_result.get("name") or "") == gemini_tools.EVENT_EDIT_PREVIEW_TOOL_NAME:
+                        return str(reply)
                     if str(reply).startswith(EVENT_CREATED_REPLY_PREFIX):
                         return reply
                     backend_messages.append(str(reply))
@@ -207,12 +209,12 @@ class GeminiProvider(ModelProvider):
         if function_name in {
             gemini_tools.EVENT_LOOKUP_BY_DATE_RANGE_TOOL_NAME,
             gemini_tools.EVENT_LOOKUP_BY_TITLE_TOOL_NAME,
-            gemini_tools.EVENT_EDIT_PREVIEW_TOOL_NAME,
         }:
             return ACTION_CONTINUE_WITH_MODEL
         if function_name in {
             gemini_tools.EVENT_DRAFT_TOOL_NAME,
             gemini_tools.EVENT_EDIT_DRAFT_TOOL_NAME,
+            gemini_tools.EVENT_EDIT_PREVIEW_TOOL_NAME,
             gemini_tools.NEW_EVENT_DRAFT_TOOL_NAME,
         }:
             return ACTION_CONTINUE_BACKEND
