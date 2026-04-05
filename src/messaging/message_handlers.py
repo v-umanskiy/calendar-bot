@@ -80,7 +80,16 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
         else:
             await telegram_service.send_message(chat_id, reply)
     else:
-        await telegram_service.send_message(chat_id, reply)
+        if reply == EVENT_RECONNECT_REQUIRED_MESSAGE:
+            url = google_oauth_service.build_oauth_connect_url(chat_id)
+            reply_markup = {
+                "inline_keyboard": [
+                    [{"text": GOOGLE_CONNECT_BUTTON_TEXT, "url": url}],
+                ]
+            }
+            await telegram_service.send_message_with_reply_markup(chat_id, reply, reply_markup)
+        else:
+            await telegram_service.send_message(chat_id, reply)
     await history_table_service.save_turn(chat_id, "user", text)
     await history_table_service.save_turn(chat_id, "assistant", assistant_reply)
     return assistant_reply

@@ -13,6 +13,16 @@ from src.utils.constants import (
 )
 
 MAX_INVALID_REPAIR_ATTEMPTS = 2
+AUTH_CONNECTION_ERRORS = {"reconnect_required", "not_connected", "missing_access_token"}
+
+
+def is_auth_connection_error(result: dict | None) -> bool:
+    if not isinstance(result, dict):
+        return False
+    if result.get("ok") is not False:
+        return False
+    error = result.get("error")
+    return isinstance(error, str) and error in AUTH_CONNECTION_ERRORS
 
 
 def call_tool_and_build_reply(
@@ -80,6 +90,9 @@ def _resolve_tool_decision(
         gemini_tools.EVENT_LOOKUP_BY_DATE_RANGE_TOOL_NAME,
         gemini_tools.EVENT_LOOKUP_BY_TITLE_TOOL_NAME,
     }:
+        lookup_result = function_result.get("result") or {}
+        if is_auth_connection_error(lookup_result):
+            return EVENT_RECONNECT_REQUIRED_MESSAGE
         follow_up_contents = _build_lookup_follow_up_contents(contents, function_result)
         return _generate_follow_up_reply(
             client=client,

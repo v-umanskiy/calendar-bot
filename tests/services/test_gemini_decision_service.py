@@ -1,5 +1,6 @@
 from src.ai import gemini_decision_service
 from src.ai import gemini_tools
+from src.utils.constants import EVENT_RECONNECT_REQUIRED_MESSAGE
 
 
 def test_resolve_tool_decision_returns_edit_preview_text():
@@ -64,3 +65,21 @@ def test_resolve_tool_decision_does_not_create_event_for_edit_mode(monkeypatch):
     )
 
     assert result is None
+
+
+def test_resolve_tool_decision_returns_reconnect_message_for_lookup_auth_error():
+    result = gemini_decision_service._resolve_tool_decision(
+        client=None,
+        model_name="unused",
+        chat_id="123",
+        contents=[],
+        function_result={
+            "name": gemini_tools.EVENT_LOOKUP_BY_DATE_RANGE_TOOL_NAME,
+            "result": {
+                "ok": False,
+                "error": "not_connected",
+            },
+        },
+    )
+
+    assert result == EVENT_RECONNECT_REQUIRED_MESSAGE

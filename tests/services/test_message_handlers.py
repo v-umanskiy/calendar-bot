@@ -8,6 +8,7 @@ from src.utils.constants import (
     WELCOME_MESSAGE,
     GOOGLE_CONNECT_MESSAGE,
     GOOGLE_CONNECT_BUTTON_TEXT,
+    EVENT_RECONNECT_REQUIRED_MESSAGE,
     EVENT_CREATED_REPLY_PREFIX,
     EVENT_REMOVE_CALLBACK_DATA,
     EVENT_REMOVED_MESSAGE,
@@ -210,6 +211,43 @@ def test_handle_text_message_event_created_payload_sends_remove_button(monkeypat
         calendar_id="primary",
         google_event_id="evt-1",
     )
+
+
+def test_handle_text_message_reconnect_reply_sends_connect_button(monkeypatch):
+    chat_id = "chat-222"
+    text = "check calendar"
+    connect_url = "https://accounts.google.com/o/oauth2/v2/auth?x=1"
+
+    handle_codes_mock = AsyncMock(return_value=None)
+    monkeypatch.setattr(message_handlers, "_handle_message_codes", handle_codes_mock)
+    load_history_mock = AsyncMock(return_value=[])
+    monkeypatch.setattr(message_handlers.history_table_service, "load_model_history", load_history_mock)
+    save_turn_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers.history_table_service, "save_turn", save_turn_mock)
+    indicator_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers, "_chat_action_indicator", indicator_mock)
+    process_text_mock = AsyncMock(return_value=EVENT_RECONNECT_REQUIRED_MESSAGE)
+    monkeypatch.setattr(message_handlers, "process_text_message", process_text_mock)
+    monkeypatch.setattr(message_handlers.google_oauth_service, "build_oauth_connect_url", lambda _chat_id: connect_url)
+
+    send_message_mock = AsyncMock()
+    send_with_markup_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message_with_reply_markup", send_with_markup_mock)
+
+    asyncio.run(message_handlers.handle_text_message(chat_id, text))
+
+    send_message_mock.assert_not_awaited()
+    reply_markup = {
+        "inline_keyboard": [
+            [{"text": GOOGLE_CONNECT_BUTTON_TEXT, "url": connect_url}],
+        ]
+    }
+    send_with_markup_mock.assert_awaited_once_with(chat_id, EVENT_RECONNECT_REQUIRED_MESSAGE, reply_markup)
+    assert save_turn_mock.await_args_list == [
+        call(chat_id, "user", text),
+        call(chat_id, "assistant", EVENT_RECONNECT_REQUIRED_MESSAGE),
+    ]
 
 
 def test_handle_callback_query_remove_event_happy_path(monkeypatch):

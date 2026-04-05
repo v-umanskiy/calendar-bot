@@ -58,7 +58,7 @@ EVENT_REMOVE_CALLBACK_DATA = "evdel"
 EVENT_REMOVED_MESSAGE = "Event removed."
 EVENT_NOT_FOUND_MESSAGE = "Event not found, probably it was already removed."
 EVENT_REMOVE_FAILED_MESSAGE = "Could not remove the event right now."
-EVENT_RECONNECT_REQUIRED_MESSAGE = "Google Calendar authorization expired. Use /connect to reconnect."
+EVENT_RECONNECT_REQUIRED_MESSAGE = "Google Calendar authorization expired."
 EVENT_CREATED_REPLY_PREFIX = "__EVENT_CREATED__:"
 
 

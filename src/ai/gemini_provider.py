@@ -196,20 +196,26 @@ class GeminiProvider(ModelProvider):
         return backend_messages[-1] if backend_messages else MODEL_PROVIDER_UNAVAILABLE_MESSAGE
 
     def _execute_tool_batch(self, *, chat_id: str, function_calls: list[dict]) -> list[dict]:
-        return [
-            {
-                "name": call.get("name"),
-                "result": gemini_tool_executor.execute_tool_call(call, chat_id),
-                "next_action": self._resolve_next_action(str(call.get("name") or "")),
-            }
-            for call in function_calls
-        ]
+        results: list[dict] = []
+        for call in function_calls:
+            function_name = str(call.get("name") or "")
+            result = gemini_tool_executor.execute_tool_call(call, chat_id)
+            results.append(
+                {
+                    "name": call.get("name"),
+                    "result": result,
+                    "next_action": self._resolve_next_action(function_name, result),
+                }
+            )
+        return results
 
-    def _resolve_next_action(self, function_name: str) -> str:
+    def _resolve_next_action(self, function_name: str, result: dict | None = None) -> str:
         if function_name in {
             gemini_tools.EVENT_LOOKUP_BY_DATE_RANGE_TOOL_NAME,
             gemini_tools.EVENT_LOOKUP_BY_TITLE_TOOL_NAME,
         }:
+            if self._is_lookup_auth_error(result):
+                return ACTION_CONTINUE_BACKEND
             return ACTION_CONTINUE_WITH_MODEL
         if function_name in {
             gemini_tools.EVENT_DRAFT_TOOL_NAME,
@@ -219,6 +225,9 @@ class GeminiProvider(ModelProvider):
         }:
             return ACTION_CONTINUE_BACKEND
         return ACTION_TERMINAL_PROTOCOL
+
+    def _is_lookup_auth_error(self, result: dict | None) -> bool:
+        return gemini_decision_service.is_auth_connection_error(result)
 
     def _build_multi_tool_follow_up_contents(
         self,

@@ -4,6 +4,7 @@ import httpx
 
 from src.utils import datetime_utils
 from src.utils import logging_utils
+from src.utils.constants import EVENT_RECONNECT_REQUIRED_MESSAGE
 from . import google_oauth_token_service
 
 
@@ -228,7 +229,7 @@ async def list_primary_events_for_date(chat_id: str, date_input: str | None = No
     if not token_result.get("ok"):
         error = token_result.get("error")
         if error in {"not_connected", "missing_access_token", "reconnect_required"}:
-            return "Google Calendar is not connected. Use /connect first."
+            return EVENT_RECONNECT_REQUIRED_MESSAGE
         return "Could not access Google Calendar right now. Please try again."
 
     day_start = datetime.combine(target_date, time.min, tzinfo=timezone.utc)
@@ -241,7 +242,7 @@ async def list_primary_events_for_date(chat_id: str, date_input: str | None = No
     if not ok and status_code == 401:
         refreshed = await google_oauth_token_service.get_valid_access_token(str(chat_id), force_refresh=True)
         if not refreshed.get("ok"):
-            return "Google Calendar authorization expired. Use /connect to reconnect."
+            return EVENT_RECONNECT_REQUIRED_MESSAGE
         ok, status_code, payload = await _list_events_in_range(
             str(refreshed["access_token"]),
             time_min=day_start,
