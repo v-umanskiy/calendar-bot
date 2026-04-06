@@ -147,10 +147,40 @@ def test_execute_tool_call_routes_to_edit_preview_tool(monkeypatch):
     preview_mock.assert_awaited_once_with("123", "evt-1")
 
 
+def test_execute_tool_call_routes_to_remove_preview_tool(monkeypatch):
+    preview_mock = AsyncMock(return_value={"ok": True, "preview": "Remove preview"})
+    monkeypatch.setattr(gemini_tool_executor.event_remove_preview_service, "prepare_primary_event_remove_preview", preview_mock)
+
+    result = gemini_tool_executor.execute_tool_call(
+        {
+            "name": gemini_tools.EVENT_REMOVE_PREVIEW_TOOL_NAME,
+            "args": {
+                "google_event_id": "evt-1",
+            },
+        },
+        "123",
+    )
+
+    assert result == {"ok": True, "preview": "Remove preview"}
+    preview_mock.assert_awaited_once_with("123", "evt-1")
+
+
 def test_execute_tool_call_returns_error_when_edit_preview_id_is_missing():
     result = gemini_tool_executor.execute_tool_call(
         {
             "name": gemini_tools.EVENT_EDIT_PREVIEW_TOOL_NAME,
+            "args": {},
+        },
+        "123",
+    )
+
+    assert result == {"ok": False, "error": "missing_google_event_id"}
+
+
+def test_execute_tool_call_returns_error_when_remove_preview_id_is_missing():
+    result = gemini_tool_executor.execute_tool_call(
+        {
+            "name": gemini_tools.EVENT_REMOVE_PREVIEW_TOOL_NAME,
             "args": {},
         },
         "123",

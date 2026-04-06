@@ -37,3 +37,15 @@ def build_event_edit_preview_text(event: dict, draft: dict | None) -> str:
     lines.append(_line("End", safe_event.get("end"), end_patch))
 
     return "\n".join(lines)
+
+
+def build_event_remove_preview_text(event: dict) -> str:
+    safe_event = event or {}
+    lines = [
+        "Do you confirm removal?",
+        "",
+        f"Title: {str(safe_event.get('title') or '')}",
+        f"Start: {_format_datetime_for_preview(safe_event.get('start'))}",
+        f"End: {_format_datetime_for_preview(safe_event.get('end'))}",
+    ]
+    return "\n".join(lines)

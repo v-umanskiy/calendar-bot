@@ -10,6 +10,7 @@ NEW_EVENT_DRAFT_TOOL_NAME = "create_new_event_draft"
 EVENT_LOOKUP_BY_DATE_RANGE_TOOL_NAME = "find_calendar_events_by_date_range"
 EVENT_LOOKUP_BY_TITLE_TOOL_NAME = "find_calendar_events_by_title"
 EVENT_EDIT_PREVIEW_TOOL_NAME = "prepare_event_edit"
+EVENT_REMOVE_PREVIEW_TOOL_NAME = "prepare_event_remove"
 EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "You are a calendar assistant. "
     "If a user asks unrelated questions, briefly decline and redirect to calendar help. "
@@ -34,6 +35,8 @@ EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "Then identify the target event via lookup tools. "
     "If exactly one event is identified, call prepare_event_edit with google_event_id. "
     "If event match is ambiguous or missing, ask a clarification question and do not call prepare_event_edit yet. "
+    "Remove flow: after identifying exactly one event to remove, call prepare_event_remove with google_event_id. "
+    "Do not claim an event was removed when no remove action was executed. "
     "Do not claim that edits were made when no edit tool was called."
 )
 
@@ -70,6 +73,18 @@ EVENT_DRAFT_TOOLS = [
                 "description": (
                     "Prepare an edit preview for an existing calendar event after the event was identified. "
                     "Uses current draft values as pending changes."
+                ),
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "google_event_id": {"type": "STRING"},
+                    },
+                },
+            },
+            {
+                "name": EVENT_REMOVE_PREVIEW_TOOL_NAME,
+                "description": (
+                    "Prepare a removal preview for an existing calendar event after the event was identified."
                 ),
                 "parameters": {
                     "type": "OBJECT",

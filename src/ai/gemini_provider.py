@@ -221,6 +221,7 @@ class GeminiProvider(ModelProvider):
             gemini_tools.EVENT_DRAFT_TOOL_NAME,
             gemini_tools.EVENT_EDIT_DRAFT_TOOL_NAME,
             gemini_tools.EVENT_EDIT_PREVIEW_TOOL_NAME,
+            gemini_tools.EVENT_REMOVE_PREVIEW_TOOL_NAME,
             gemini_tools.NEW_EVENT_DRAFT_TOOL_NAME,
         }:
             return ACTION_CONTINUE_BACKEND

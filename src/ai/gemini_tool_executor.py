@@ -2,6 +2,7 @@ import asyncio
 
 from src.services import event_draft_table_service
 from src.services import event_edit_preview_service
+from src.services import event_remove_preview_service
 from src.services import google_calendar_service
 
 from . import gemini_tools
@@ -16,6 +17,7 @@ def execute_tool_call(function_call: dict, chat_id: str) -> dict:
         gemini_tools.EVENT_LOOKUP_BY_DATE_RANGE_TOOL_NAME,
         gemini_tools.EVENT_LOOKUP_BY_TITLE_TOOL_NAME,
         gemini_tools.EVENT_EDIT_PREVIEW_TOOL_NAME,
+        gemini_tools.EVENT_REMOVE_PREVIEW_TOOL_NAME,
     }:
         return {"ok": False, "error": "unsupported_function"}
 
@@ -69,11 +71,21 @@ def execute_tool_call(function_call: dict, chat_id: str) -> dict:
                     query=normalized_query,
                 )
             )
-        if function_name == gemini_tools.EVENT_EDIT_PREVIEW_TOOL_NAME:
+        if function_name in {
+            gemini_tools.EVENT_EDIT_PREVIEW_TOOL_NAME,
+            gemini_tools.EVENT_REMOVE_PREVIEW_TOOL_NAME,
+        }:
             if normalized_google_event_id is None or not normalized_google_event_id.strip():
                 return {"ok": False, "error": "missing_google_event_id"}
+            if function_name == gemini_tools.EVENT_EDIT_PREVIEW_TOOL_NAME:
+                return asyncio.run(
+                    event_edit_preview_service.prepare_primary_event_edit_preview(
+                        str(normalized_chat_id),
+                        normalized_google_event_id,
+                    )
+                )
             return asyncio.run(
-                event_edit_preview_service.prepare_primary_event_edit_preview(
+                event_remove_preview_service.prepare_primary_event_remove_preview(
                     str(normalized_chat_id),
                     normalized_google_event_id,
                 )

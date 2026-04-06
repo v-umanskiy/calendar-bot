@@ -108,6 +108,10 @@ def _resolve_tool_decision(
             return f"{EVENT_EDIT_PREVIEW_REPLY_PREFIX}{preview_text}"
         text = preview_result.get("message")
         return text or MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+    if function_name == gemini_tools.EVENT_REMOVE_PREVIEW_TOOL_NAME:
+        preview_result = function_result.get("result") or {}
+        text = preview_result.get("preview") if preview_result.get("ok") else preview_result.get("message")
+        return text or MODEL_PROVIDER_UNAVAILABLE_MESSAGE
 
     event_draft_update_result = function_result.get("result")
     if not isinstance(event_draft_update_result, dict) or not event_draft_update_result.get("ok"):
