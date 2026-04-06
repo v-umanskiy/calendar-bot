@@ -68,7 +68,7 @@ async def clear_message_reply_markup(chat_id: int, message_id: int):
     payload = {
         "chat_id": chat_id,
         "message_id": message_id,
-        "reply_markup": None,
+        "reply_markup": {"inline_keyboard": []},
     }
     async with httpx.AsyncClient(timeout=10) as client:
         try:
