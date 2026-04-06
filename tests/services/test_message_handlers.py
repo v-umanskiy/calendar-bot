@@ -11,8 +11,10 @@ from src.utils.constants import (
     EVENT_RECONNECT_REQUIRED_MESSAGE,
     EVENT_CREATED_REPLY_PREFIX,
     EVENT_EDIT_PREVIEW_REPLY_PREFIX,
+    EVENT_REMOVE_PREVIEW_REPLY_PREFIX,
     EVENT_EDIT_CONFIRM_BUTTON_TEXT,
     EVENT_EDIT_CONFIRM_CALLBACK_DATA,
+    EVENT_REMOVE_CONFIRM_BUTTON_TEXT,
     EVENT_REMOVE_CALLBACK_DATA,
     EVENT_REMOVED_MESSAGE,
     EVENT_UPDATED_MESSAGE,
@@ -303,6 +305,59 @@ def test_handle_text_message_edit_preview_payload_sends_confirm_button(monkeypat
         telegram_message_id=77,
         calendar_id="primary",
         google_event_id="evt-7",
+    )
+    assert save_turn_mock.await_args_list == [
+        call(chat_id, "user", text),
+        call(chat_id, "assistant", preview_text),
+    ]
+
+
+def test_handle_text_message_remove_preview_payload_sends_confirm_button(monkeypatch):
+    chat_id = "chat-334"
+    text = "delete event"
+    preview_text = (
+        "Do you confirm removal?\n\n"
+        "Title: Demo\n"
+        "Start: 2026-04-08 13:00\n"
+        "End: 2026-04-08 14:00"
+    )
+    reply = f"{EVENT_REMOVE_PREVIEW_REPLY_PREFIX}evt-77\n{preview_text}"
+
+    handle_codes_mock = AsyncMock(return_value=None)
+    monkeypatch.setattr(message_handlers, "_handle_message_codes", handle_codes_mock)
+    load_history_mock = AsyncMock(return_value=[])
+    monkeypatch.setattr(message_handlers.history_table_service, "load_model_history", load_history_mock)
+    save_turn_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers.history_table_service, "save_turn", save_turn_mock)
+    indicator_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers, "_chat_action_indicator", indicator_mock)
+    process_text_mock = AsyncMock(return_value=reply)
+    monkeypatch.setattr(message_handlers, "process_text_message", process_text_mock)
+
+    send_message_mock = AsyncMock()
+    save_link_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+    monkeypatch.setattr(
+        message_handlers.telegram_service,
+        "send_message_with_reply_markup",
+        AsyncMock(return_value={"message_id": 78}),
+    )
+    monkeypatch.setattr(message_handlers.google_event_links_table_service, "save_event_link", save_link_mock)
+
+    asyncio.run(message_handlers.handle_text_message(chat_id, text))
+
+    send_message_mock.assert_not_awaited()
+    reply_markup = {
+        "inline_keyboard": [
+            [{"text": EVENT_REMOVE_CONFIRM_BUTTON_TEXT, "callback_data": EVENT_REMOVE_CALLBACK_DATA}],
+        ]
+    }
+    message_handlers.telegram_service.send_message_with_reply_markup.assert_awaited_once_with(chat_id, preview_text, reply_markup)
+    save_link_mock.assert_awaited_once_with(
+        chat_id=chat_id,
+        telegram_message_id=78,
+        calendar_id="primary",
+        google_event_id="evt-77",
     )
     assert save_turn_mock.await_args_list == [
         call(chat_id, "user", text),

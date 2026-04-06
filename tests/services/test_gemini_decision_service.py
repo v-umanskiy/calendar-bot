@@ -1,6 +1,10 @@
 from src.ai import gemini_decision_service
 from src.ai import gemini_tools
-from src.utils.constants import EVENT_RECONNECT_REQUIRED_MESSAGE, EVENT_EDIT_PREVIEW_REPLY_PREFIX
+from src.utils.constants import (
+    EVENT_RECONNECT_REQUIRED_MESSAGE,
+    EVENT_EDIT_PREVIEW_REPLY_PREFIX,
+    EVENT_REMOVE_PREVIEW_REPLY_PREFIX,
+)
 
 
 def test_resolve_tool_decision_returns_edit_preview_text():
@@ -50,12 +54,14 @@ def test_resolve_tool_decision_returns_remove_preview_text():
             "name": gemini_tools.EVENT_REMOVE_PREVIEW_TOOL_NAME,
             "result": {
                 "ok": True,
+                "google_event_id": "evt-1",
                 "preview": "Do you confirm removal?\n\nTitle: Demo",
             },
         },
     )
 
-    assert result == "Do you confirm removal?\n\nTitle: Demo"
+    assert result is not None
+    assert result.startswith(EVENT_REMOVE_PREVIEW_REPLY_PREFIX)
 
 
 def test_resolve_tool_decision_does_not_create_event_for_edit_mode(monkeypatch):

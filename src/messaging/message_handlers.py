@@ -26,10 +26,12 @@ from src.utils.constants import (
     UNSUPPORTED_INPUT_MESSAGE,
     EVENT_CREATED_REPLY_PREFIX,
     EVENT_EDIT_PREVIEW_REPLY_PREFIX,
+    EVENT_REMOVE_PREVIEW_REPLY_PREFIX,
     EVENT_REMOVE_BUTTON_TEXT,
     EVENT_REMOVE_CALLBACK_DATA,
     EVENT_EDIT_CONFIRM_BUTTON_TEXT,
     EVENT_EDIT_CONFIRM_CALLBACK_DATA,
+    EVENT_REMOVE_CONFIRM_BUTTON_TEXT,
     EVENT_REMOVED_MESSAGE,
     EVENT_UPDATED_MESSAGE,
     EVENT_NOT_FOUND_MESSAGE,
@@ -103,6 +105,27 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
                         calendar_id="primary",
                         google_event_id=str(draft.get("google_event_id") or ""),
                     )
+            assistant_reply = preview
+        else:
+            await telegram_service.send_message(chat_id, reply)
+    elif isinstance(reply, str) and reply.startswith(EVENT_REMOVE_PREVIEW_REPLY_PREFIX):
+        parsed = _parse_event_remove_preview_reply(reply)
+        if parsed:
+            preview = str(parsed.get("preview") or "")
+            google_event_id = str(parsed.get("google_event_id") or "")
+            reply_markup = {
+                "inline_keyboard": [
+                    [{"text": EVENT_REMOVE_CONFIRM_BUTTON_TEXT, "callback_data": EVENT_REMOVE_CALLBACK_DATA}],
+                ]
+            }
+            sent = await telegram_service.send_message_with_reply_markup(chat_id, preview, reply_markup)
+            if isinstance(sent, dict) and sent.get("message_id") is not None and google_event_id:
+                await google_event_links_table_service.save_event_link(
+                    chat_id=chat_id,
+                    telegram_message_id=sent.get("message_id"),
+                    calendar_id="primary",
+                    google_event_id=google_event_id,
+                )
             assistant_reply = preview
         else:
             await telegram_service.send_message(chat_id, reply)
@@ -332,3 +355,15 @@ def _parse_event_created_reply(reply: str) -> dict | None:
     if not payload.get("summary") or not payload.get("google_event_id"):
         return None
     return payload
+
+
+def _parse_event_remove_preview_reply(reply: str) -> dict | None:
+    if not reply.startswith(EVENT_REMOVE_PREVIEW_REPLY_PREFIX):
+        return None
+    raw = reply[len(EVENT_REMOVE_PREVIEW_REPLY_PREFIX):]
+    if "\n" not in raw:
+        return None
+    google_event_id, preview = raw.split("\n", 1)
+    if not google_event_id or not preview:
+        return None
+    return {"google_event_id": google_event_id, "preview": preview}
