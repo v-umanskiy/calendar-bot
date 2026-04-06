@@ -2,8 +2,6 @@ from src.ai import gemini_decision_service
 from src.ai import gemini_tools
 from src.utils.constants import (
     EVENT_RECONNECT_REQUIRED_MESSAGE,
-    EVENT_EDIT_PREVIEW_REPLY_PREFIX,
-    EVENT_REMOVE_PREVIEW_REPLY_PREFIX,
 )
 
 
@@ -22,8 +20,7 @@ def test_resolve_tool_decision_returns_edit_preview_text():
         },
     )
 
-    assert result is not None
-    assert result.startswith(EVENT_EDIT_PREVIEW_REPLY_PREFIX)
+    assert result == {"type": "event_edit_preview", "text": "Edit preview:\nTitle: Old -> **New**"}
 
 
 def test_resolve_tool_decision_returns_error_message_for_edit_preview_failure():
@@ -41,7 +38,7 @@ def test_resolve_tool_decision_returns_error_message_for_edit_preview_failure():
         },
     )
 
-    assert result == "Event not found in Google Calendar."
+    assert result == {"type": "text", "text": "Event not found in Google Calendar."}
 
 
 def test_resolve_tool_decision_returns_remove_preview_text():
@@ -60,8 +57,12 @@ def test_resolve_tool_decision_returns_remove_preview_text():
         },
     )
 
-    assert result is not None
-    assert result.startswith(EVENT_REMOVE_PREVIEW_REPLY_PREFIX)
+    assert result == {
+        "type": "event_remove_preview",
+        "text": "Do you confirm removal?\n\nTitle: Demo",
+        "google_event_id": "evt-1",
+        "calendar_id": "primary",
+    }
 
 
 def test_resolve_tool_decision_does_not_create_event_for_edit_mode(monkeypatch):
@@ -107,4 +108,4 @@ def test_resolve_tool_decision_returns_reconnect_message_for_lookup_auth_error()
         },
     )
 
-    assert result == EVENT_RECONNECT_REQUIRED_MESSAGE
+    assert result == {"type": "text", "text": EVENT_RECONNECT_REQUIRED_MESSAGE}

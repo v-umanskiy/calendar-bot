@@ -10,8 +10,6 @@ from src.utils.constants import (
     EVENT_SAVE_SUCCESS_MESSAGE_TEMPLATE,
     EVENT_SAVE_FAILED_MESSAGE,
     EVENT_RECONNECT_REQUIRED_MESSAGE,
-    EVENT_EDIT_PREVIEW_REPLY_PREFIX,
-    EVENT_REMOVE_PREVIEW_REPLY_PREFIX,
 )
 
 MAX_INVALID_REPAIR_ATTEMPTS = 2
@@ -35,7 +33,7 @@ def call_tool_and_build_reply(
     chat_id: str,
     function_call: dict,
     tool_config: dict,
-) -> Optional[str]:
+) -> Optional[dict]:
     function_result = _execute_tool_lifecycle(
         client=client,
         model_name=model_name,
@@ -86,7 +84,7 @@ def _resolve_tool_decision(
     chat_id: str,
     contents: list[dict],
     function_result: dict,
-) -> Optional[str]:
+) -> Optional[dict]:
     function_name = str(function_result.get("name") or "")
     if function_name in {
         gemini_tools.EVENT_LOOKUP_BY_DATE_RANGE_TOOL_NAME,
@@ -94,30 +92,36 @@ def _resolve_tool_decision(
     }:
         lookup_result = function_result.get("result") or {}
         if is_auth_connection_error(lookup_result):
-            return EVENT_RECONNECT_REQUIRED_MESSAGE
+            return {"type": "text", "text": EVENT_RECONNECT_REQUIRED_MESSAGE}
         follow_up_contents = _build_lookup_follow_up_contents(contents, function_result)
-        return _generate_follow_up_reply(
+        follow_up_text = _generate_follow_up_reply(
             client=client,
             model_name=model_name,
             follow_up_contents=follow_up_contents,
         ) or MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+        return {"type": "text", "text": follow_up_text}
 
     if function_name == gemini_tools.EVENT_EDIT_PREVIEW_TOOL_NAME:
         preview_result = function_result.get("result") or {}
         if preview_result.get("ok"):
             preview_text = str(preview_result.get("preview") or "")
-            return f"{EVENT_EDIT_PREVIEW_REPLY_PREFIX}{preview_text}"
+            return {"type": "event_edit_preview", "text": preview_text}
         text = preview_result.get("message")
-        return text or MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+        return {"type": "text", "text": text or MODEL_PROVIDER_UNAVAILABLE_MESSAGE}
     if function_name == gemini_tools.EVENT_REMOVE_PREVIEW_TOOL_NAME:
         preview_result = function_result.get("result") or {}
         if preview_result.get("ok"):
             preview_text = str(preview_result.get("preview") or "")
             google_event_id = str(preview_result.get("google_event_id") or "")
             if preview_text and google_event_id:
-                return f"{EVENT_REMOVE_PREVIEW_REPLY_PREFIX}{google_event_id}\n{preview_text}"
+                return {
+                    "type": "event_remove_preview",
+                    "text": preview_text,
+                    "google_event_id": google_event_id,
+                    "calendar_id": "primary",
+                }
         text = preview_result.get("message")
-        return text or MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+        return {"type": "text", "text": text or MODEL_PROVIDER_UNAVAILABLE_MESSAGE}
 
     event_draft_update_result = function_result.get("result")
     if not isinstance(event_draft_update_result, dict) or not event_draft_update_result.get("ok"):
@@ -132,14 +136,19 @@ def _resolve_tool_decision(
     if not missing_required and not invalid_fields and draft_mode == "edit":
         return None
     if invalid_fields:
-        return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+        return {"type": "text", "text": MODEL_PROVIDER_UNAVAILABLE_MESSAGE}
     if missing_required:
         follow_up_contents = _build_missing_follow_up_contents(contents, function_result)
-        return _generate_follow_up_reply(client=client, model_name=model_name, follow_up_contents=follow_up_contents)
+        follow_up_text = _generate_follow_up_reply(
+            client=client,
+            model_name=model_name,
+            follow_up_contents=follow_up_contents,
+        ) or MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+        return {"type": "text", "text": follow_up_text}
     return None
 
 
-def _create_calendar_event(chat_id: str, draft: dict) -> str:
+def _create_calendar_event(chat_id: str, draft: dict) -> dict:
     create_result = asyncio.run(
         google_calendar_service.create_primary_event(
             str(chat_id),
@@ -150,18 +159,19 @@ def _create_calendar_event(chat_id: str, draft: dict) -> str:
     )
     if not create_result.get("ok"):
         if create_result.get("error") in {"reconnect_required", "not_connected", "missing_access_token"}:
-            return EVENT_RECONNECT_REQUIRED_MESSAGE
-        return EVENT_SAVE_FAILED_MESSAGE
+            return {"type": "text", "text": EVENT_RECONNECT_REQUIRED_MESSAGE}
+        return {"type": "text", "text": EVENT_SAVE_FAILED_MESSAGE}
     summary = EVENT_SAVE_SUCCESS_MESSAGE_TEMPLATE.format(
         title=str(draft.get("title") or ""),
         start=str(draft.get("start") or ""),
         end=str(draft.get("end") or ""),
     )
-    return gemini_tools.build_event_created_reply(
-        summary,
-        str(create_result.get("calendar_id") or "primary"),
-        str(create_result.get("google_event_id") or ""),
-    )
+    return {
+        "type": "event_created",
+        "summary": summary,
+        "calendar_id": str(create_result.get("calendar_id") or "primary"),
+        "google_event_id": str(create_result.get("google_event_id") or ""),
+    }
 
 
 def _generate_follow_up_reply(*, client, model_name: str, follow_up_contents: list[dict]) -> Optional[str]:

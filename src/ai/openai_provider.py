@@ -8,7 +8,7 @@ from src.utils import logging_utils
 from src.utils.constants import (
     MODEL_PROVIDER_UNAVAILABLE_MESSAGE,
 )
-from .model_provider import ModelProvider, ModelHistory
+from .model_provider import ModelProvider, ModelHistory, ModelReply
 from src.services import secret_service
 
 
@@ -48,7 +48,7 @@ class OpenAIProvider(ModelProvider):
         prompt: str,
         chat_id: str,
         history: Optional[ModelHistory] = None,
-    ) -> str:
+    ) -> ModelReply:
         logging_utils.log_prefixed_fields(
             "Calling OpenAI.",
             ("PROMPT", prompt),
@@ -62,9 +62,9 @@ class OpenAIProvider(ModelProvider):
             response_text, _ = await asyncio.to_thread(self._send_completion, messages)
         except Exception as exc:
             print("OPENAI_CALL_ERROR:", repr(exc))
-            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+            return {"type": "text", "text": MODEL_PROVIDER_UNAVAILABLE_MESSAGE}
 
-        return response_text
+        return {"type": "text", "text": response_text}
 
     def _send_completion(self, messages: list[dict]) -> tuple[str, Optional[dict]]:
         response = self._client.chat.completions.create(

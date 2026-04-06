@@ -1,5 +1,4 @@
 import asyncio
-import json
 import time
 import uuid
 
@@ -24,9 +23,6 @@ from src.utils.constants import (
     GOOGLE_CONNECT_MESSAGE,
     GOOGLE_CONNECT_BUTTON_TEXT,
     UNSUPPORTED_INPUT_MESSAGE,
-    EVENT_CREATED_REPLY_PREFIX,
-    EVENT_EDIT_PREVIEW_REPLY_PREFIX,
-    EVENT_REMOVE_PREVIEW_REPLY_PREFIX,
     EVENT_REMOVE_BUTTON_TEXT,
     EVENT_REMOVE_CALLBACK_DATA,
     EVENT_EDIT_CONFIRM_BUTTON_TEXT,
@@ -66,29 +62,29 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
     if reply is None:
         raise RuntimeError("Gemini reply missing; call_gemini returned None")
 
-    assistant_reply = reply
-    if isinstance(reply, str) and reply.startswith(EVENT_CREATED_REPLY_PREFIX):
-        payload = _parse_event_created_reply(reply)
-        if payload:
-            summary = str(payload.get("summary") or "")
-            reply_markup = {
-                "inline_keyboard": [
-                    [{"text": EVENT_REMOVE_BUTTON_TEXT, "callback_data": EVENT_REMOVE_CALLBACK_DATA}],
-                ]
-            }
-            sent = await telegram_service.send_message_with_reply_markup(chat_id, summary, reply_markup)
-            if isinstance(sent, dict) and sent.get("message_id") is not None:
-                await google_event_links_table_service.save_event_link(
-                    chat_id=chat_id,
-                    telegram_message_id=sent.get("message_id"),
-                    calendar_id=str(payload.get("calendar_id") or "primary"),
-                    google_event_id=str(payload.get("google_event_id") or ""),
-                )
-            assistant_reply = summary
-        else:
-            await telegram_service.send_message(chat_id, reply)
-    elif isinstance(reply, str) and reply.startswith(EVENT_EDIT_PREVIEW_REPLY_PREFIX):
-        preview = reply[len(EVENT_EDIT_PREVIEW_REPLY_PREFIX):]
+    if not isinstance(reply, dict):
+        raise RuntimeError("Model reply must be a structured envelope dict")
+
+    reply_type = str(reply.get("type") or "")
+    assistant_reply = str(reply.get("text") or "")
+    if reply_type == "event_created":
+        summary = str(reply.get("summary") or "")
+        reply_markup = {
+            "inline_keyboard": [
+                [{"text": EVENT_REMOVE_BUTTON_TEXT, "callback_data": EVENT_REMOVE_CALLBACK_DATA}],
+            ]
+        }
+        sent = await telegram_service.send_message_with_reply_markup(chat_id, summary, reply_markup)
+        if isinstance(sent, dict) and sent.get("message_id") is not None:
+            await google_event_links_table_service.save_event_link(
+                chat_id=chat_id,
+                telegram_message_id=sent.get("message_id"),
+                calendar_id=str(reply.get("calendar_id") or "primary"),
+                google_event_id=str(reply.get("google_event_id") or ""),
+            )
+        assistant_reply = summary
+    elif reply_type == "event_edit_preview":
+        preview = str(reply.get("text") or "")
         if preview:
             reply_markup = {
                 "inline_keyboard": [
@@ -107,12 +103,11 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
                     )
             assistant_reply = preview
         else:
-            await telegram_service.send_message(chat_id, reply)
-    elif isinstance(reply, str) and reply.startswith(EVENT_REMOVE_PREVIEW_REPLY_PREFIX):
-        parsed = _parse_event_remove_preview_reply(reply)
-        if parsed:
-            preview = str(parsed.get("preview") or "")
-            google_event_id = str(parsed.get("google_event_id") or "")
+            await telegram_service.send_message(chat_id, assistant_reply)
+    elif reply_type == "event_remove_preview":
+        preview = str(reply.get("text") or "")
+        google_event_id = str(reply.get("google_event_id") or "")
+        if preview and google_event_id:
             reply_markup = {
                 "inline_keyboard": [
                     [{"text": EVENT_REMOVE_CONFIRM_BUTTON_TEXT, "callback_data": EVENT_REMOVE_CALLBACK_DATA}],
@@ -128,18 +123,20 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
                 )
             assistant_reply = preview
         else:
-            await telegram_service.send_message(chat_id, reply)
+            await telegram_service.send_message(chat_id, assistant_reply)
     else:
-        if reply == EVENT_RECONNECT_REQUIRED_MESSAGE:
+        text_reply = str(reply.get("text") or "")
+        assistant_reply = text_reply
+        if text_reply == EVENT_RECONNECT_REQUIRED_MESSAGE:
             url = google_oauth_service.build_oauth_connect_url(chat_id)
             reply_markup = {
                 "inline_keyboard": [
                     [{"text": GOOGLE_CONNECT_BUTTON_TEXT, "url": url}],
                 ]
             }
-            await telegram_service.send_message_with_reply_markup(chat_id, reply, reply_markup)
+            await telegram_service.send_message_with_reply_markup(chat_id, text_reply, reply_markup)
         else:
-            await telegram_service.send_message(chat_id, reply)
+            await telegram_service.send_message(chat_id, text_reply)
     await history_table_service.save_turn(chat_id, "user", text)
     await history_table_service.save_turn(chat_id, "assistant", assistant_reply)
     return assistant_reply
@@ -340,30 +337,3 @@ async def handle_callback_query(callback_query: dict):
             ("chat_id", chat_id),
             ("ms", int((time.monotonic() - send_start) * 1000)),
         )
-
-
-def _parse_event_created_reply(reply: str) -> dict | None:
-    if not reply.startswith(EVENT_CREATED_REPLY_PREFIX):
-        return None
-    raw = reply[len(EVENT_CREATED_REPLY_PREFIX):]
-    try:
-        payload = json.loads(raw)
-    except Exception:
-        return None
-    if not isinstance(payload, dict):
-        return None
-    if not payload.get("summary") or not payload.get("google_event_id"):
-        return None
-    return payload
-
-
-def _parse_event_remove_preview_reply(reply: str) -> dict | None:
-    if not reply.startswith(EVENT_REMOVE_PREVIEW_REPLY_PREFIX):
-        return None
-    raw = reply[len(EVENT_REMOVE_PREVIEW_REPLY_PREFIX):]
-    if "\n" not in raw:
-        return None
-    google_event_id, preview = raw.split("\n", 1)
-    if not google_event_id or not preview:
-        return None
-    return {"google_event_id": google_event_id, "preview": preview}

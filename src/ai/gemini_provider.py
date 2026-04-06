@@ -8,11 +8,10 @@ from google import genai
 
 from src.utils import logging_utils
 from src.utils.constants import (
-    EVENT_CREATED_REPLY_PREFIX,
     MODEL_PROVIDER_LIMIT_REACHED_MESSAGE,
     MODEL_PROVIDER_UNAVAILABLE_MESSAGE,
 )
-from .model_provider import ModelProvider, ModelHistory
+from .model_provider import ModelProvider, ModelHistory, ModelReply
 from . import gemini_tools
 from . import gemini_decision_service
 from . import gemini_tool_executor
@@ -36,7 +35,7 @@ class GeminiProvider(ModelProvider):
         prompt: str,
         chat_id: str,
         history: Optional[ModelHistory] = None,
-    ) -> str:
+    ) -> ModelReply:
         gemini_history = self._convert_history(history)
         contents = self._build_contents(gemini_history, [{"text": prompt}])
         try:
@@ -52,10 +51,10 @@ class GeminiProvider(ModelProvider):
             google_api_exceptions.TooManyRequests,
         ) as err:
             print(f"Gemini API quota exhausted: {err}")
-            return MODEL_PROVIDER_LIMIT_REACHED_MESSAGE
+            return {"type": "text", "text": MODEL_PROVIDER_LIMIT_REACHED_MESSAGE}
         except Exception as exc:
             print("GEMINI_CALL_ERROR:", repr(exc))
-            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+            return {"type": "text", "text": MODEL_PROVIDER_UNAVAILABLE_MESSAGE}
 
     def _run_with_tools(
         self,
@@ -63,7 +62,7 @@ class GeminiProvider(ModelProvider):
         chat_id: str,
         prompt: str,
         raw_history: Optional[ModelHistory],
-    ) -> str:
+    ) -> ModelReply:
         system_instruction = (
             f"{gemini_tools.EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION}\n\n"
             f"{datetime_utils.current_time_context_block().strip()}"
@@ -87,7 +86,7 @@ class GeminiProvider(ModelProvider):
 
         function_calls = gemini_tools.extract_function_calls(response)
         if not function_calls:
-            return response.text or "No response"
+            return {"type": "text", "text": response.text or "No response"}
         tool_names = [str(call.get("name") or "") for call in function_calls]
         logging_utils.log_prefixed_fields(
             "GEMINI_TOOL_CALLS",
@@ -103,7 +102,7 @@ class GeminiProvider(ModelProvider):
                 ("names", tool_names),
                 ("detail", f"expected at most {MAX_TOOL_CALLS_PER_TURN} function calls"),
             )
-            return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+            return {"type": "text", "text": MODEL_PROVIDER_UNAVAILABLE_MESSAGE}
 
         return self._execute_tool_calls_and_build_reply(
             contents=contents,
@@ -119,10 +118,10 @@ class GeminiProvider(ModelProvider):
         chat_id: str,
         tool_config: dict,
         function_calls: list[dict],
-    ) -> str:
+    ) -> ModelReply:
         pending_calls = function_calls
         current_contents = list(contents)
-        backend_messages: list[str] = []
+        backend_messages: list[dict] = []
 
         while pending_calls:
             if len(pending_calls) > MAX_TOOL_CALLS_PER_TURN:
@@ -134,7 +133,7 @@ class GeminiProvider(ModelProvider):
                     ("names", tool_names),
                     ("detail", f"expected at most {MAX_TOOL_CALLS_PER_TURN} function calls"),
                 )
-                return MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+                return {"type": "text", "text": MODEL_PROVIDER_UNAVAILABLE_MESSAGE}
 
             tool_results = self._execute_tool_batch(chat_id=chat_id, function_calls=pending_calls)
 
@@ -164,14 +163,16 @@ class GeminiProvider(ModelProvider):
                     )
                     if not reply:
                         continue
-                    if str(tool_result.get("name") or "") == gemini_tools.EVENT_EDIT_PREVIEW_TOOL_NAME:
-                        return str(reply)
-                    if str(reply).startswith(EVENT_CREATED_REPLY_PREFIX):
+                    if str(reply.get("type") or "") in {
+                        "event_created",
+                        "event_edit_preview",
+                        "event_remove_preview",
+                    }:
                         return reply
-                    backend_messages.append(str(reply))
+                    backend_messages.append(reply)
 
             if not model_results:
-                return backend_messages[-1] if backend_messages else MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+                return backend_messages[-1] if backend_messages else {"type": "text", "text": MODEL_PROVIDER_UNAVAILABLE_MESSAGE}
 
             current_contents = self._build_multi_tool_follow_up_contents(
                 current_contents,
@@ -184,7 +185,14 @@ class GeminiProvider(ModelProvider):
             )
             pending_calls = gemini_tools.extract_function_calls(response)
             if not pending_calls:
-                return response.text or (backend_messages[-1] if backend_messages else MODEL_PROVIDER_UNAVAILABLE_MESSAGE)
+                return {
+                    "type": "text",
+                    "text": response.text or (
+                        str(backend_messages[-1].get("text") or "")
+                        if backend_messages
+                        else MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+                    ),
+                }
 
             tool_names = [str(call.get("name") or "") for call in pending_calls]
             logging_utils.log_prefixed_fields(
@@ -193,7 +201,7 @@ class GeminiProvider(ModelProvider):
                 ("count", len(pending_calls)),
                 ("names", tool_names),
             )
-        return backend_messages[-1] if backend_messages else MODEL_PROVIDER_UNAVAILABLE_MESSAGE
+        return backend_messages[-1] if backend_messages else {"type": "text", "text": MODEL_PROVIDER_UNAVAILABLE_MESSAGE}
 
     def _execute_tool_batch(self, *, chat_id: str, function_calls: list[dict]) -> list[dict]:
         results: list[dict] = []

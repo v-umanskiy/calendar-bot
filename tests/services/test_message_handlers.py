@@ -9,9 +9,6 @@ from src.utils.constants import (
     GOOGLE_CONNECT_MESSAGE,
     GOOGLE_CONNECT_BUTTON_TEXT,
     EVENT_RECONNECT_REQUIRED_MESSAGE,
-    EVENT_CREATED_REPLY_PREFIX,
-    EVENT_EDIT_PREVIEW_REPLY_PREFIX,
-    EVENT_REMOVE_PREVIEW_REPLY_PREFIX,
     EVENT_EDIT_CONFIRM_BUTTON_TEXT,
     EVENT_EDIT_CONFIRM_CALLBACK_DATA,
     EVENT_REMOVE_CONFIRM_BUTTON_TEXT,
@@ -27,7 +24,7 @@ def test_handle_text_message_regular_flow(monkeypatch):
     chat_id = "chat-123"
     text = "Tell me a joke"
     history = [{"role": "user", "text": "prior"}]
-    reply = "Here is a joke"
+    reply = {"type": "text", "text": "Here is a joke"}
 
     handle_codes_mock = AsyncMock(return_value=None)
     monkeypatch.setattr(message_handlers, "_handle_message_codes", handle_codes_mock)
@@ -52,10 +49,10 @@ def test_handle_text_message_regular_flow(monkeypatch):
     handle_codes_mock.assert_awaited_once_with(chat_id, text)
     load_history_mock.assert_awaited_once_with(chat_id)
     process_text_mock.assert_awaited_once_with(chat_id, text, False, history)
-    send_message_mock.assert_awaited_once_with(chat_id, reply)
+    send_message_mock.assert_awaited_once_with(chat_id, "Here is a joke")
     assert save_turn_mock.await_args_list == [
         call(chat_id, "user", text),
-        call(chat_id, "assistant", reply),
+        call(chat_id, "assistant", "Here is a joke"),
     ]
     indicator_mock.assert_called_once_with(chat_id, "typing")
 
@@ -179,10 +176,12 @@ def test_handle_text_message_event_created_payload_sends_remove_button(monkeypat
     chat_id = "chat-111"
     text = "create sync"
     summary = "Saved to Google Calendar.\nTitle: Sync\nStart: 2026-03-10T10:00:00+03:00\nEnd: 2026-03-10T11:00:00+03:00"
-    reply = (
-        f"{EVENT_CREATED_REPLY_PREFIX}"
-        "{\"summary\":\"Saved to Google Calendar.\\nTitle: Sync\\nStart: 2026-03-10T10:00:00+03:00\\nEnd: 2026-03-10T11:00:00+03:00\",\"calendar_id\":\"primary\",\"google_event_id\":\"evt-1\"}"
-    )
+    reply = {
+        "type": "event_created",
+        "summary": summary,
+        "calendar_id": "primary",
+        "google_event_id": "evt-1",
+    }
 
     handle_codes_mock = AsyncMock(return_value=None)
     monkeypatch.setattr(message_handlers, "_handle_message_codes", handle_codes_mock)
@@ -232,7 +231,7 @@ def test_handle_text_message_reconnect_reply_sends_connect_button(monkeypatch):
     monkeypatch.setattr(message_handlers.history_table_service, "save_turn", save_turn_mock)
     indicator_mock = AsyncMock()
     monkeypatch.setattr(message_handlers, "_chat_action_indicator", indicator_mock)
-    process_text_mock = AsyncMock(return_value=EVENT_RECONNECT_REQUIRED_MESSAGE)
+    process_text_mock = AsyncMock(return_value={"type": "text", "text": EVENT_RECONNECT_REQUIRED_MESSAGE})
     monkeypatch.setattr(message_handlers, "process_text_message", process_text_mock)
     monkeypatch.setattr(message_handlers.google_oauth_service, "build_oauth_connect_url", lambda _chat_id: connect_url)
 
@@ -265,7 +264,7 @@ def test_handle_text_message_edit_preview_payload_sends_confirm_button(monkeypat
         "Start: 2026-04-08 13:00 -> 2026-04-09 13:00\n"
         "End: 2026-04-08 14:00 -> 2026-04-09 14:00"
     )
-    reply = f"{EVENT_EDIT_PREVIEW_REPLY_PREFIX}{preview_text}"
+    reply = {"type": "event_edit_preview", "text": preview_text}
 
     handle_codes_mock = AsyncMock(return_value=None)
     monkeypatch.setattr(message_handlers, "_handle_message_codes", handle_codes_mock)
@@ -321,7 +320,7 @@ def test_handle_text_message_remove_preview_payload_sends_confirm_button(monkeyp
         "Start: 2026-04-08 13:00\n"
         "End: 2026-04-08 14:00"
     )
-    reply = f"{EVENT_REMOVE_PREVIEW_REPLY_PREFIX}evt-77\n{preview_text}"
+    reply = {"type": "event_remove_preview", "text": preview_text, "google_event_id": "evt-77", "calendar_id": "primary"}
 
     handle_codes_mock = AsyncMock(return_value=None)
     monkeypatch.setattr(message_handlers, "_handle_message_codes", handle_codes_mock)

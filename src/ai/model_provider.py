@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 ModelHistory = list[dict]
+ModelReply = dict
 
 
 class ModelProvider(ABC):
@@ -12,7 +13,7 @@ class ModelProvider(ABC):
         prompt: str,
         chat_id: str,
         history: Optional[ModelHistory] = None,
-    ) -> str:
+    ) -> ModelReply:
         raise NotImplementedError
 
 _provider: ModelProvider | None = None
