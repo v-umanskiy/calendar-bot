@@ -12,6 +12,7 @@ from src.services import transcription_table_service
 from src.services import google_oauth_service
 from src.services import google_calendar_service
 from src.services import google_event_links_table_service
+from src.services import event_draft_table_service
 from .message_processor_simple import (
     handle_text_message as process_text_message,
 )
@@ -30,8 +31,10 @@ from src.utils.constants import (
     EVENT_EDIT_CONFIRM_BUTTON_TEXT,
     EVENT_EDIT_CONFIRM_CALLBACK_DATA,
     EVENT_REMOVED_MESSAGE,
+    EVENT_UPDATED_MESSAGE,
     EVENT_NOT_FOUND_MESSAGE,
     EVENT_REMOVE_FAILED_MESSAGE,
+    EVENT_UPDATE_FAILED_MESSAGE,
     EVENT_RECONNECT_REQUIRED_MESSAGE,
     CLEAR_HISTORY_KEYBOARD,
     CLEAR_HISTORY_CONFIRM_CALLBACK_DATA,
@@ -90,7 +93,16 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
                     [{"text": EVENT_EDIT_CONFIRM_BUTTON_TEXT, "callback_data": EVENT_EDIT_CONFIRM_CALLBACK_DATA}],
                 ]
             }
-            await telegram_service.send_message_with_reply_markup(chat_id, preview, reply_markup)
+            sent = await telegram_service.send_message_with_reply_markup(chat_id, preview, reply_markup)
+            if isinstance(sent, dict) and sent.get("message_id") is not None:
+                draft = await event_draft_table_service.load_event_draft(chat_id)
+                if isinstance(draft, dict) and draft.get("google_event_id"):
+                    await google_event_links_table_service.save_event_link(
+                        chat_id=chat_id,
+                        telegram_message_id=sent.get("message_id"),
+                        calendar_id="primary",
+                        google_event_id=str(draft.get("google_event_id") or ""),
+                    )
             assistant_reply = preview
         else:
             await telegram_service.send_message(chat_id, reply)
@@ -228,6 +240,48 @@ async def handle_callback_query(callback_query: dict):
             return
         await telegram_service.send_message(chat_id, EVENT_REMOVE_FAILED_MESSAGE)
         await history_table_service.save_turn(chat_id, "assistant", EVENT_REMOVE_FAILED_MESSAGE)
+        return
+    if data == EVENT_EDIT_CONFIRM_CALLBACK_DATA:
+        chat_id = message["chat"]["id"]
+        message_id = message["message_id"]
+        await history_table_service.save_turn(chat_id, "user", "User confirmed event update.")
+        link = await google_event_links_table_service.get_event_link(chat_id, message_id)
+        if not isinstance(link, dict):
+            await telegram_service.send_message(chat_id, EVENT_NOT_FOUND_MESSAGE)
+            await history_table_service.save_turn(chat_id, "assistant", EVENT_NOT_FOUND_MESSAGE)
+            return
+        draft = await event_draft_table_service.load_event_draft(chat_id)
+        if not isinstance(draft, dict):
+            await telegram_service.send_message(chat_id, EVENT_UPDATE_FAILED_MESSAGE)
+            await history_table_service.save_turn(chat_id, "assistant", EVENT_UPDATE_FAILED_MESSAGE)
+            return
+        update_result = await google_calendar_service.update_event(
+            str(chat_id),
+            calendar_id=str(link.get("calendar_id") or "primary"),
+            google_event_id=str(link.get("google_event_id") or ""),
+            title=draft.get("title"),
+            start=draft.get("start"),
+            end=draft.get("end"),
+        )
+        if update_result.get("ok"):
+            await google_event_links_table_service.delete_event_link(chat_id, message_id)
+            await event_draft_table_service.delete_event_draft(chat_id)
+            await telegram_service.clear_message_reply_markup(chat_id, message_id)
+            await telegram_service.send_message(chat_id, EVENT_UPDATED_MESSAGE)
+            await history_table_service.save_turn(chat_id, "assistant", EVENT_UPDATED_MESSAGE)
+            return
+        if update_result.get("error") == "not_found":
+            await google_event_links_table_service.delete_event_link(chat_id, message_id)
+            await telegram_service.clear_message_reply_markup(chat_id, message_id)
+            await telegram_service.send_message(chat_id, EVENT_NOT_FOUND_MESSAGE)
+            await history_table_service.save_turn(chat_id, "assistant", EVENT_NOT_FOUND_MESSAGE)
+            return
+        if update_result.get("error") in {"reconnect_required", "not_connected", "missing_access_token"}:
+            await telegram_service.send_message(chat_id, EVENT_RECONNECT_REQUIRED_MESSAGE)
+            await history_table_service.save_turn(chat_id, "assistant", EVENT_RECONNECT_REQUIRED_MESSAGE)
+            return
+        await telegram_service.send_message(chat_id, EVENT_UPDATE_FAILED_MESSAGE)
+        await history_table_service.save_turn(chat_id, "assistant", EVENT_UPDATE_FAILED_MESSAGE)
         return
 
     if data not in {

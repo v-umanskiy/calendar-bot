@@ -334,3 +334,13 @@ async def upsert_event_edit_draft(
         title=title,
         mode=MODE_EDIT,
     )
+
+
+async def set_edit_target_event(chat_id: int | str, google_event_id: str):
+    if not str(google_event_id or "").strip():
+        return {"ok": False, "error": "missing_google_event_id"}
+    result = await event_draft_repository.upsert_draft_fields(
+        str(chat_id),
+        {"google_event_id": str(google_event_id), "mode": MODE_EDIT},
+    )
+    return {"ok": True, "result": result}

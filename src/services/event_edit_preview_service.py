@@ -32,6 +32,7 @@ async def prepare_primary_event_edit_preview(chat_id: str, google_event_id: str)
             "message": "No draft changes found for edit preview. Tell me what to change first.",
         }
 
+    await event_draft_table_service.set_edit_target_event(chat_id, google_event_id)
     preview_text = event_preview_formatter.build_event_edit_preview_text(event_result["event"], safe_draft)
     return {
         "ok": True,
