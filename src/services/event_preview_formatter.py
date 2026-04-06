@@ -1,3 +1,18 @@
+from datetime import datetime
+
+
+def _format_datetime_for_preview(value) -> str:
+    text = str(value or "")
+    if not text:
+        return text
+    normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return text
+    return parsed.strftime("%Y-%m-%d %H:%M")
+
+
 def build_event_edit_preview_text(event: dict, draft: dict | None) -> str:
     safe_event = event
     safe_draft = draft or {}
@@ -6,17 +21,16 @@ def build_event_edit_preview_text(event: dict, draft: dict | None) -> str:
     end_patch = safe_draft.get("end")
 
     lines = [
-        "Edit preview:",
-        f"Event ID: {safe_event.get('google_event_id') or '(unknown)'}",
+        "Do you confirm the update?",
         "",
     ]
 
     def _line(label: str, current_value, patch_value):
-        current_text = str(current_value or "")
+        current_text = _format_datetime_for_preview(current_value) if label in {"Start", "End"} else str(current_value or "")
         if patch_value is None:
             return f"{label}: {current_text}"
-        next_text = str(patch_value)
-        return f"{label}: {current_text} -> **{next_text}**"
+        next_text = _format_datetime_for_preview(patch_value) if label in {"Start", "End"} else str(patch_value)
+        return f"{label}: {current_text} -> {next_text}"
 
     lines.append(_line("Title", safe_event.get("title"), title_patch))
     lines.append(_line("Start", safe_event.get("start"), start_patch))

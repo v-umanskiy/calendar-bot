@@ -60,6 +60,9 @@ EVENT_NOT_FOUND_MESSAGE = "Event not found, probably it was already removed."
 EVENT_REMOVE_FAILED_MESSAGE = "Could not remove the event right now."
 EVENT_RECONNECT_REQUIRED_MESSAGE = "Google Calendar authorization expired."
 EVENT_CREATED_REPLY_PREFIX = "__EVENT_CREATED__:"
+EVENT_EDIT_PREVIEW_REPLY_PREFIX = "__EVENT_EDIT_PREVIEW__:"
+EVENT_EDIT_CONFIRM_BUTTON_TEXT = "Confirm"
+EVENT_EDIT_CONFIRM_CALLBACK_DATA = "eveditconfirm"
 
 
 CLEAR_HISTORY_CONFIRM_CALLBACK_DATA = "clear_history_confirm_yes"

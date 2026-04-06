@@ -1,6 +1,6 @@
 from src.ai import gemini_decision_service
 from src.ai import gemini_tools
-from src.utils.constants import EVENT_RECONNECT_REQUIRED_MESSAGE
+from src.utils.constants import EVENT_RECONNECT_REQUIRED_MESSAGE, EVENT_EDIT_PREVIEW_REPLY_PREFIX
 
 
 def test_resolve_tool_decision_returns_edit_preview_text():
@@ -18,7 +18,8 @@ def test_resolve_tool_decision_returns_edit_preview_text():
         },
     )
 
-    assert result == "Edit preview:\nTitle: Old -> **New**"
+    assert result is not None
+    assert result.startswith(EVENT_EDIT_PREVIEW_REPLY_PREFIX)
 
 
 def test_resolve_tool_decision_returns_error_message_for_edit_preview_failure():

@@ -24,7 +24,8 @@ def test_prepare_primary_event_edit_preview_success(monkeypatch):
 
     assert result["ok"] is True
     assert result["google_event_id"] == "evt-1"
-    assert "Title: Old title -> **New title**" in result["preview"]
+    assert "Do you confirm the update?" in result["preview"]
+    assert "Title: Old title -> New title" in result["preview"]
 
 
 def test_prepare_primary_event_edit_preview_not_found(monkeypatch):

@@ -10,6 +10,9 @@ from src.utils.constants import (
     GOOGLE_CONNECT_BUTTON_TEXT,
     EVENT_RECONNECT_REQUIRED_MESSAGE,
     EVENT_CREATED_REPLY_PREFIX,
+    EVENT_EDIT_PREVIEW_REPLY_PREFIX,
+    EVENT_EDIT_CONFIRM_BUTTON_TEXT,
+    EVENT_EDIT_CONFIRM_CALLBACK_DATA,
     EVENT_REMOVE_CALLBACK_DATA,
     EVENT_REMOVED_MESSAGE,
     EVENT_NOT_FOUND_MESSAGE,
@@ -247,6 +250,48 @@ def test_handle_text_message_reconnect_reply_sends_connect_button(monkeypatch):
     assert save_turn_mock.await_args_list == [
         call(chat_id, "user", text),
         call(chat_id, "assistant", EVENT_RECONNECT_REQUIRED_MESSAGE),
+    ]
+
+
+def test_handle_text_message_edit_preview_payload_sends_confirm_button(monkeypatch):
+    chat_id = "chat-333"
+    text = "move event to tomorrow"
+    preview_text = (
+        "Do you confirm the update?\n\n"
+        "Title: Planning\n"
+        "Start: 2026-04-08 13:00 -> 2026-04-09 13:00\n"
+        "End: 2026-04-08 14:00 -> 2026-04-09 14:00"
+    )
+    reply = f"{EVENT_EDIT_PREVIEW_REPLY_PREFIX}{preview_text}"
+
+    handle_codes_mock = AsyncMock(return_value=None)
+    monkeypatch.setattr(message_handlers, "_handle_message_codes", handle_codes_mock)
+    load_history_mock = AsyncMock(return_value=[])
+    monkeypatch.setattr(message_handlers.history_table_service, "load_model_history", load_history_mock)
+    save_turn_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers.history_table_service, "save_turn", save_turn_mock)
+    indicator_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers, "_chat_action_indicator", indicator_mock)
+    process_text_mock = AsyncMock(return_value=reply)
+    monkeypatch.setattr(message_handlers, "process_text_message", process_text_mock)
+
+    send_message_mock = AsyncMock()
+    send_with_markup_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message_with_reply_markup", send_with_markup_mock)
+
+    asyncio.run(message_handlers.handle_text_message(chat_id, text))
+
+    send_message_mock.assert_not_awaited()
+    reply_markup = {
+        "inline_keyboard": [
+            [{"text": EVENT_EDIT_CONFIRM_BUTTON_TEXT, "callback_data": EVENT_EDIT_CONFIRM_CALLBACK_DATA}],
+        ]
+    }
+    send_with_markup_mock.assert_awaited_once_with(chat_id, preview_text, reply_markup)
+    assert save_turn_mock.await_args_list == [
+        call(chat_id, "user", text),
+        call(chat_id, "assistant", preview_text),
     ]
 
 

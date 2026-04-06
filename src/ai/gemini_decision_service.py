@@ -10,6 +10,7 @@ from src.utils.constants import (
     EVENT_SAVE_SUCCESS_MESSAGE_TEMPLATE,
     EVENT_SAVE_FAILED_MESSAGE,
     EVENT_RECONNECT_REQUIRED_MESSAGE,
+    EVENT_EDIT_PREVIEW_REPLY_PREFIX,
 )
 
 MAX_INVALID_REPAIR_ATTEMPTS = 2
@@ -102,7 +103,10 @@ def _resolve_tool_decision(
 
     if function_name == gemini_tools.EVENT_EDIT_PREVIEW_TOOL_NAME:
         preview_result = function_result.get("result") or {}
-        text = preview_result.get("preview") if preview_result.get("ok") else preview_result.get("message")
+        if preview_result.get("ok"):
+            preview_text = str(preview_result.get("preview") or "")
+            return f"{EVENT_EDIT_PREVIEW_REPLY_PREFIX}{preview_text}"
+        text = preview_result.get("message")
         return text or MODEL_PROVIDER_UNAVAILABLE_MESSAGE
 
     event_draft_update_result = function_result.get("result")

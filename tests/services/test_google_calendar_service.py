@@ -171,3 +171,78 @@ def test_get_primary_event_by_id_returns_not_found(monkeypatch):
     )
 
     assert result == {"ok": False, "error": "not_found"}
+
+
+def test_update_event_requires_at_least_one_field():
+    result = asyncio.run(
+        google_calendar_service.update_event(
+            "chat-111",
+            calendar_id="primary",
+            google_event_id="evt-1",
+        )
+    )
+
+    assert result == {"ok": False, "error": "no_fields_provided"}
+
+
+def test_update_event_retries_after_401(monkeypatch):
+    token_mock = AsyncMock(side_effect=[{"ok": True, "access_token": "token-1"}, {"ok": True, "access_token": "token-2"}])
+    patch_mock = AsyncMock(
+        side_effect=[
+            (False, 401, {"error": {"message": "expired"}}),
+            (
+                True,
+                200,
+                {
+                    "id": "evt-1",
+                    "summary": "Updated title",
+                    "start": {"dateTime": "2026-03-05T10:00:00+00:00"},
+                    "end": {"dateTime": "2026-03-05T11:00:00+00:00"},
+                },
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(google_calendar_service.google_oauth_token_service, "get_valid_access_token", token_mock)
+    monkeypatch.setattr(google_calendar_service, "_patch_event", patch_mock)
+
+    result = asyncio.run(
+        google_calendar_service.update_event(
+            "chat-111",
+            calendar_id="primary",
+            google_event_id="evt-1",
+            title="Updated title",
+        )
+    )
+
+    assert result == {
+        "ok": True,
+        "event": {
+            "google_event_id": "evt-1",
+            "title": "Updated title",
+            "start": "2026-03-05T10:00:00+00:00",
+            "end": "2026-03-05T11:00:00+00:00",
+        },
+    }
+    token_mock.assert_any_await("chat-111")
+    token_mock.assert_any_await("chat-111", force_refresh=True)
+    assert patch_mock.await_count == 2
+
+
+def test_update_event_returns_not_found_on_404(monkeypatch):
+    token_mock = AsyncMock(return_value={"ok": True, "access_token": "token-1"})
+    patch_mock = AsyncMock(return_value=(False, 404, {"error": {"message": "not found"}}))
+
+    monkeypatch.setattr(google_calendar_service.google_oauth_token_service, "get_valid_access_token", token_mock)
+    monkeypatch.setattr(google_calendar_service, "_patch_event", patch_mock)
+
+    result = asyncio.run(
+        google_calendar_service.update_event(
+            "chat-111",
+            calendar_id="primary",
+            google_event_id="evt-1",
+            start="2026-03-05T10:00:00+00:00",
+        )
+    )
+
+    assert result == {"ok": False, "error": "not_found"}

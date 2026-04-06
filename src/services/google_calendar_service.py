@@ -199,6 +199,38 @@ async def _delete_event(
     return response.is_success, response.status_code
 
 
+async def _patch_event(
+    access_token: str,
+    *,
+    calendar_id: str,
+    google_event_id: str,
+    title: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+) -> tuple[bool, int, dict]:
+    headers = {"Authorization": f"Bearer {access_token}"}
+    payload: dict = {}
+    if title is not None:
+        payload["summary"] = title
+    if start is not None:
+        payload["start"] = {"dateTime": start}
+    if end is not None:
+        payload["end"] = {"dateTime": end}
+
+    url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{google_event_id}"
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            response = await client.patch(url, headers=headers, json=payload)
+        except Exception as exc:
+            return False, 0, {"error": "event_patch_request_failed", "detail": repr(exc)}
+
+    try:
+        response_payload = response.json()
+    except Exception:
+        response_payload = {"raw": response.text}
+    return response.is_success, response.status_code, response_payload if isinstance(response_payload, dict) else {}
+
+
 async def _get_primary_event(
     access_token: str,
     *,
@@ -418,3 +450,57 @@ async def delete_event(chat_id: str, *, calendar_id: str, google_event_id: str) 
     if status_code in {404, 410}:
         return {"ok": False, "error": "not_found"}
     return {"ok": False, "error": "delete_failed"}
+
+
+async def update_event(
+    chat_id: str,
+    *,
+    calendar_id: str,
+    google_event_id: str,
+    title: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+) -> dict:
+    if title is None and start is None and end is None:
+        return {"ok": False, "error": "no_fields_provided"}
+
+    token_result = await google_oauth_token_service.get_valid_access_token(str(chat_id))
+    if not token_result.get("ok"):
+        return {"ok": False, "error": token_result.get("error")}
+
+    ok, status_code, payload = await _patch_event(
+        str(token_result["access_token"]),
+        calendar_id=calendar_id,
+        google_event_id=google_event_id,
+        title=title,
+        start=start,
+        end=end,
+    )
+    if not ok and status_code == 401:
+        refreshed = await google_oauth_token_service.get_valid_access_token(str(chat_id), force_refresh=True)
+        if not refreshed.get("ok"):
+            return {"ok": False, "error": "reconnect_required"}
+        ok, status_code, payload = await _patch_event(
+            str(refreshed["access_token"]),
+            calendar_id=calendar_id,
+            google_event_id=google_event_id,
+            title=title,
+            start=start,
+            end=end,
+        )
+
+    if not ok:
+        if status_code in {404, 410}:
+            return {"ok": False, "error": "not_found"}
+        return {"ok": False, "error": "update_failed"}
+
+    start_value, end_value = _extract_event_bounds(payload if isinstance(payload, dict) else {})
+    return {
+        "ok": True,
+        "event": {
+            "google_event_id": str(payload.get("id") or google_event_id),
+            "title": str(payload.get("summary") or "(no title)"),
+            "start": start_value,
+            "end": end_value,
+        },
+    }

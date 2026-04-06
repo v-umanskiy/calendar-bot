@@ -24,8 +24,11 @@ from src.utils.constants import (
     GOOGLE_CONNECT_BUTTON_TEXT,
     UNSUPPORTED_INPUT_MESSAGE,
     EVENT_CREATED_REPLY_PREFIX,
+    EVENT_EDIT_PREVIEW_REPLY_PREFIX,
     EVENT_REMOVE_BUTTON_TEXT,
     EVENT_REMOVE_CALLBACK_DATA,
+    EVENT_EDIT_CONFIRM_BUTTON_TEXT,
+    EVENT_EDIT_CONFIRM_CALLBACK_DATA,
     EVENT_REMOVED_MESSAGE,
     EVENT_NOT_FOUND_MESSAGE,
     EVENT_REMOVE_FAILED_MESSAGE,
@@ -77,6 +80,18 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
                     google_event_id=str(payload.get("google_event_id") or ""),
                 )
             assistant_reply = summary
+        else:
+            await telegram_service.send_message(chat_id, reply)
+    elif isinstance(reply, str) and reply.startswith(EVENT_EDIT_PREVIEW_REPLY_PREFIX):
+        preview = reply[len(EVENT_EDIT_PREVIEW_REPLY_PREFIX):]
+        if preview:
+            reply_markup = {
+                "inline_keyboard": [
+                    [{"text": EVENT_EDIT_CONFIRM_BUTTON_TEXT, "callback_data": EVENT_EDIT_CONFIRM_CALLBACK_DATA}],
+                ]
+            }
+            await telegram_service.send_message_with_reply_markup(chat_id, preview, reply_markup)
+            assistant_reply = preview
         else:
             await telegram_service.send_message(chat_id, reply)
     else:
