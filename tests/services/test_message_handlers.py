@@ -175,7 +175,7 @@ def test_handle_message_code_events(monkeypatch):
 def test_handle_text_message_event_created_payload_sends_remove_button(monkeypatch):
     chat_id = "chat-111"
     text = "create sync"
-    summary = "Saved to Google Calendar.\nTitle: Sync\nStart: 2026-03-10T10:00:00+03:00\nEnd: 2026-03-10T11:00:00+03:00"
+    summary = "Saved to Google Calendar.\nTitle: Sync\nStart: 2026-03-10 10:00\nEnd: 2026-03-10 11:00"
     reply = {
         "type": "event_created",
         "summary": summary,

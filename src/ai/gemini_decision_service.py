@@ -4,6 +4,7 @@ from typing import Optional
 from . import gemini_tool_executor
 from . import gemini_tools
 from src.services import google_calendar_service
+from src.services import event_preview_formatter
 from src.utils import logging_utils
 from src.utils.constants import (
     MODEL_PROVIDER_UNAVAILABLE_MESSAGE,
@@ -163,8 +164,8 @@ def _create_calendar_event(chat_id: str, draft: dict) -> dict:
         return {"type": "text", "text": EVENT_SAVE_FAILED_MESSAGE}
     summary = EVENT_SAVE_SUCCESS_MESSAGE_TEMPLATE.format(
         title=str(draft.get("title") or ""),
-        start=str(draft.get("start") or ""),
-        end=str(draft.get("end") or ""),
+        start=event_preview_formatter.format_datetime_for_user(draft.get("start")),
+        end=event_preview_formatter.format_datetime_for_user(draft.get("end")),
     )
     return {
         "type": "event_created",
