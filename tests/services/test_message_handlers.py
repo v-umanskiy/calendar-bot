@@ -42,13 +42,13 @@ def test_handle_text_message_regular_flow(monkeypatch):
     monkeypatch.setattr(message_handlers, "_chat_action_indicator", indicator_mock)
 
     process_text_mock = AsyncMock(return_value=reply)
-    monkeypatch.setattr(message_handlers, "process_text_message", process_text_mock)
+    monkeypatch.setattr(message_handlers, "generate_reply", process_text_mock)
 
     asyncio.run(message_handlers.handle_text_message(chat_id, text))
 
     handle_codes_mock.assert_awaited_once_with(chat_id, text)
     load_history_mock.assert_awaited_once_with(chat_id)
-    process_text_mock.assert_awaited_once_with(chat_id, text, False, history)
+    process_text_mock.assert_awaited_once_with(prompt=text, chat_id=chat_id, history=history)
     send_message_mock.assert_awaited_once_with(chat_id, "Here is a joke")
     assert save_turn_mock.await_args_list == [
         call(chat_id, "user", text),
@@ -77,7 +77,7 @@ def test_handle_text_message_returns_when_code_handled(monkeypatch):
     monkeypatch.setattr(message_handlers, "_chat_action_indicator", indicator_mock)
 
     process_text_mock = AsyncMock()
-    monkeypatch.setattr(message_handlers, "process_text_message", process_text_mock)
+    monkeypatch.setattr(message_handlers, "generate_reply", process_text_mock)
 
     asyncio.run(message_handlers.handle_text_message(chat_id, text))
 
@@ -192,7 +192,7 @@ def test_handle_text_message_event_created_payload_sends_remove_button(monkeypat
     indicator_mock = AsyncMock()
     monkeypatch.setattr(message_handlers, "_chat_action_indicator", indicator_mock)
     process_text_mock = AsyncMock(return_value=reply)
-    monkeypatch.setattr(message_handlers, "process_text_message", process_text_mock)
+    monkeypatch.setattr(message_handlers, "generate_reply", process_text_mock)
 
     send_with_markup_mock = AsyncMock(return_value={"message_id": 42})
     send_message_mock = AsyncMock()
@@ -232,7 +232,7 @@ def test_handle_text_message_reconnect_reply_sends_connect_button(monkeypatch):
     indicator_mock = AsyncMock()
     monkeypatch.setattr(message_handlers, "_chat_action_indicator", indicator_mock)
     process_text_mock = AsyncMock(return_value={"type": "text", "text": EVENT_RECONNECT_REQUIRED_MESSAGE})
-    monkeypatch.setattr(message_handlers, "process_text_message", process_text_mock)
+    monkeypatch.setattr(message_handlers, "generate_reply", process_text_mock)
     monkeypatch.setattr(message_handlers.google_oauth_service, "build_oauth_connect_url", lambda _chat_id: connect_url)
 
     send_message_mock = AsyncMock()
@@ -275,7 +275,7 @@ def test_handle_text_message_edit_preview_payload_sends_confirm_button(monkeypat
     indicator_mock = AsyncMock()
     monkeypatch.setattr(message_handlers, "_chat_action_indicator", indicator_mock)
     process_text_mock = AsyncMock(return_value=reply)
-    monkeypatch.setattr(message_handlers, "process_text_message", process_text_mock)
+    monkeypatch.setattr(message_handlers, "generate_reply", process_text_mock)
 
     send_message_mock = AsyncMock()
     send_with_markup_mock = AsyncMock()
@@ -331,7 +331,7 @@ def test_handle_text_message_remove_preview_payload_sends_confirm_button(monkeyp
     indicator_mock = AsyncMock()
     monkeypatch.setattr(message_handlers, "_chat_action_indicator", indicator_mock)
     process_text_mock = AsyncMock(return_value=reply)
-    monkeypatch.setattr(message_handlers, "process_text_message", process_text_mock)
+    monkeypatch.setattr(message_handlers, "generate_reply", process_text_mock)
 
     send_message_mock = AsyncMock()
     save_link_mock = AsyncMock()

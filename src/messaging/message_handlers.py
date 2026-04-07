@@ -12,11 +12,10 @@ from src.services import google_oauth_service
 from src.services import google_calendar_service
 from src.services import google_event_links_table_service
 from src.services import event_draft_table_service
-from .message_processor_simple import (
-    handle_text_message as process_text_message,
-)
+from src.ai.gemini_provider import generate_reply
 from src.utils import logging_utils
 from src.utils.constants import (
+    TRANSCRIBED_VOICE_PROMPT_TEMPLATE,
     WELCOME_MESSAGE,
     CLEAR_HISTORY_MESSAGE,
     HISTORY_CLEARED_MESSAGE,
@@ -51,7 +50,10 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
     reply = None
     try:
         history = await history_table_service.load_model_history(chat_id)
-        reply = await process_text_message(chat_id, text, is_transcribed, history)
+        prompt = text
+        if is_transcribed:
+            prompt = TRANSCRIBED_VOICE_PROMPT_TEMPLATE.format(message=text)
+        reply = await generate_reply(prompt=prompt, chat_id=chat_id, history=history)
     finally:
         indicator.cancel()
         try:
