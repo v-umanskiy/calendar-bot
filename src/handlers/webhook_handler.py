@@ -1,6 +1,5 @@
 from src.services import cleanup_service
 from src.messaging import message_handlers
-from . import transcription_handler
 
 
 async def handle_telegram_webhook_data(data: any) -> any:
@@ -41,7 +40,3 @@ async def _handle_telegram_webhook_data(data: any) -> any:
     finally:
         await cleanup_service.cleanup_chat_history(chat_id)
         return {"ok": True}
-
-
-async def handle_transcription_data(event: any) -> any:
-    return await transcription_handler.handle_transcription_data(event)

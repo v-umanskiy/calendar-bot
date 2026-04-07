@@ -4,7 +4,6 @@ from src.utils import logging_utils
 from . import event_draft_table_service
 from . import history_table_service
 from . import s3_service
-from . import transcription_table_service
 
 
 WINDOW_TURNS = int(os.getenv("WINDOW_TURNS", "12"))
@@ -36,37 +35,3 @@ async def cleanup_chat_history(chat_id: int, *, full: bool = False) -> None:
     except Exception as exc:
         print(f"Cleanup for chat_id {chat_id} failed: {repr(exc)}")
 
-
-async def cleanup_transcription_job(job: dict, transcript_key: str | None) -> None:
-    job_id = job.get("job_id")
-    try:
-        keys: list[str] = []
-
-        audio_key = job.get("file_key")
-        if audio_key:
-            normalized_audio_key = (
-                audio_key
-                if audio_key.startswith("telegram-files/")
-                else f"telegram-files/{audio_key}"
-            )
-            keys.append(normalized_audio_key)
-
-        if transcript_key:
-            keys.append(transcript_key)
-
-        logging_utils.log_prefixed_message_full(
-            "Transcription cleanup summary",
-            {
-                "job_id": job_id,
-                "audio_key_present": bool(audio_key),
-                "transcript_key_present": bool(transcript_key),
-            },
-        )
-
-        if keys:
-            await s3_service.delete_files_from_s3(keys)
-
-        if job_id:
-            await transcription_table_service.delete_job(job_id)
-    except Exception as exc:
-        print(f"Cleanup for transcription job {job_id} failed: {repr(exc)}")
