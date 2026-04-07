@@ -154,22 +154,29 @@ async def handle_voice_message(voice: any, chat_id: str) -> str | None:
         await history_table_service.save_turn(chat_id, "assistant", VOICE_TOO_LONG_MESSAGE)
         return VOICE_TOO_LONG_MESSAGE
 
+    status_message = await telegram_service.send_message(chat_id, "Recognizing voice...")
+    status_message_id = status_message.get("message_id") if isinstance(status_message, dict) else None
+
     file_id = voice["file_id"]
-    file_bytes = await telegram_service.download_file_from_telegram(file_id)
-    if file_bytes:
-        try:
-            transcript = await asyncio.to_thread(whisper_service.transcribe_audio_bytes, file_bytes, "ogg")
-        except Exception as exc:
-            print("WHISPER_ERROR:", repr(exc))
-            message = "Sorry, I couldn’t transcribe your voice message"
-            await telegram_service.send_message(chat_id, message)
-            return message
-        await handle_text_message(chat_id, transcript, is_transcribed=True)
-        return None
-    else:
+    try:
+        file_bytes = await telegram_service.download_file_from_telegram(file_id)
+        if file_bytes:
+            try:
+                transcript = await asyncio.to_thread(whisper_service.transcribe_audio_bytes, file_bytes, "ogg")
+            except Exception as exc:
+                print("WHISPER_ERROR:", repr(exc))
+                message = "Sorry, I couldn’t transcribe your voice message"
+                await telegram_service.send_message(chat_id, message)
+                return message
+            await handle_text_message(chat_id, transcript, is_transcribed=True)
+            return None
+
         message = "Sorry, I couldn’t download your voice message"
         await telegram_service.send_message(chat_id, message)
         return message
+    finally:
+        if status_message_id is not None:
+            await telegram_service.delete_message(chat_id, status_message_id)
 
 
 async def handle_unsupported_message(chat_id: str) -> str:

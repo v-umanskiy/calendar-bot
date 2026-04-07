@@ -79,6 +79,21 @@ async def clear_message_reply_markup(chat_id: int, message_id: int):
             return
 
 
+async def delete_message(chat_id: int, message_id: int):
+    url = f"{TELEGRAM_API_URL}/deleteMessage"
+    payload = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            response = await client.post(url, json=payload)
+            logging_utils.log_http_result("DELETE_MESSAGE", response)
+        except Exception as e:
+            print("DELETE_MESSAGE_ERROR:", repr(e))
+            return
+
+
 async def send_chat_action(chat_id: int, action: str = "typing"):
     url = f"{TELEGRAM_API_URL}/sendChatAction"
     payload = {"chat_id": chat_id, "action": action}
