@@ -542,20 +542,39 @@ def test_handle_voice_message_accepts_duration_equal_two_minutes(monkeypatch):
     voice = {"file_id": "voice-2", "duration": 120}
 
     download_mock = AsyncMock(return_value=b"audio")
-    upload_mock = AsyncMock(return_value=("https://example.com/audio", "telegram-files/voices/voice-2.ogg"))
-    save_job_mock = AsyncMock()
-    transcribe_mock = MagicMock()
+    whisper_mock = MagicMock(return_value="transcribed voice text")
+    handle_text_mock = AsyncMock()
     send_message_mock = AsyncMock()
 
     monkeypatch.setattr(message_handlers.telegram_service, "download_file_from_telegram", download_mock)
-    monkeypatch.setattr(message_handlers.s3_service, "upload_file_to_s3", upload_mock)
-    monkeypatch.setattr(message_handlers.transcription_table_service, "save_transcription_job", save_job_mock)
-    monkeypatch.setattr(message_handlers.transcription_aws_service, "transcribe", transcribe_mock)
+    monkeypatch.setattr(message_handlers.whisper_service, "transcribe_audio_bytes", whisper_mock)
+    monkeypatch.setattr(message_handlers, "handle_text_message", handle_text_mock)
     monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
 
     result = asyncio.run(message_handlers.handle_voice_message(voice, chat_id))
 
     assert result is None
     download_mock.assert_awaited_once_with("voice-2")
+    whisper_mock.assert_called_once_with(b"audio", "ogg")
+    handle_text_mock.assert_awaited_once_with(chat_id, "transcribed voice text", is_transcribed=True)
     send_message_mock.assert_not_awaited()
-    transcribe_mock.assert_called_once()
+
+
+def test_handle_voice_message_handles_whisper_error(monkeypatch):
+    chat_id = "chat-voice-fail"
+    voice = {"file_id": "voice-3", "duration": 35}
+
+    download_mock = AsyncMock(return_value=b"audio")
+    send_message_mock = AsyncMock()
+
+    def _raise_whisper_error(_file_bytes: bytes, _file_ext: str):
+        raise RuntimeError("whisper failed")
+
+    monkeypatch.setattr(message_handlers.telegram_service, "download_file_from_telegram", download_mock)
+    monkeypatch.setattr(message_handlers.whisper_service, "transcribe_audio_bytes", _raise_whisper_error)
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+
+    result = asyncio.run(message_handlers.handle_voice_message(voice, chat_id))
+
+    assert result == "Sorry, I couldn’t transcribe your voice message"
+    send_message_mock.assert_awaited_once_with(chat_id, "Sorry, I couldn’t transcribe your voice message")

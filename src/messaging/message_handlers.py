@@ -1,13 +1,10 @@
 import asyncio
 import time
-import uuid
 
 from src.services import cleanup_service
 from src.services import history_table_service
-from src.services import s3_service
 from src.services import telegram_service
-from src.services import transcription_aws_service
-from src.services import transcription_table_service
+from src.services import whisper_service
 from src.services import google_oauth_service
 from src.services import google_calendar_service
 from src.services import google_event_links_table_service
@@ -160,11 +157,14 @@ async def handle_voice_message(voice: any, chat_id: str) -> str | None:
     file_id = voice["file_id"]
     file_bytes = await telegram_service.download_file_from_telegram(file_id)
     if file_bytes:
-        job_id = f"tg-{uuid.uuid4()}"
-        file_key = f"voices/{file_id}.ogg"
-        file_url, _ = await s3_service.upload_file_to_s3(file_bytes, file_key)
-        await transcription_table_service.save_transcription_job(chat_id, job_id, file_url, file_key)
-        transcription_aws_service.transcribe(job_id, file_key)
+        try:
+            transcript = await asyncio.to_thread(whisper_service.transcribe_audio_bytes, file_bytes, "ogg")
+        except Exception as exc:
+            print("WHISPER_ERROR:", repr(exc))
+            message = "Sorry, I couldn’t transcribe your voice message"
+            await telegram_service.send_message(chat_id, message)
+            return message
+        await handle_text_message(chat_id, transcript, is_transcribed=True)
         return None
     else:
         message = "Sorry, I couldn’t download your voice message"
