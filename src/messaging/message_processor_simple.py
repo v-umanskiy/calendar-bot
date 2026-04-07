@@ -1,15 +1,13 @@
-from src.ai.model_provider import get_model_provider
+from src.ai.gemini_provider import generate_reply
 from src.utils.constants import (
     TRANSCRIBED_VOICE_PROMPT_TEMPLATE,
 )
-
-model_provider = get_model_provider()
 
 
 async def handle_text_message(chat_id: str, text: str, is_transcribed: bool, history):
     prompt = text
     if is_transcribed:
         prompt = TRANSCRIBED_VOICE_PROMPT_TEMPLATE.format(message=text)
-    reply = await model_provider.generate_reply(prompt=prompt, chat_id=chat_id, history=history)
+    reply = await generate_reply(prompt=prompt, chat_id=chat_id, history=history)
 
     return reply
