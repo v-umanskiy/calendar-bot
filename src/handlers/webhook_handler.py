@@ -1,4 +1,7 @@
+import asyncio
+
 from src.services import cleanup_service
+from src.services import telegram_service
 from src.messaging import message_handlers
 
 
@@ -25,18 +28,33 @@ async def _handle_telegram_webhook_data(data: any) -> any:
     document = message.get("document")
     text = message.get("text")
 
-    reply = None
+    await telegram_service.send_chat_action(chat_id, "typing")
+    indicator = asyncio.create_task(_chat_action_indicator(chat_id, "typing"))
     try:
         if voice:
-            reply = await message_handlers.handle_voice_message(voice, chat_id)
+            await message_handlers.handle_voice_message(voice, chat_id)
         elif document:
-            reply = await message_handlers.handle_unsupported_message(chat_id)
+            await message_handlers.handle_unsupported_message(chat_id)
         elif text:
-            reply = await message_handlers.handle_text_message(chat_id, text)
+            await message_handlers.handle_text_message(chat_id, text)
         else:
-            reply = await message_handlers.handle_unsupported_message(chat_id)
+            await message_handlers.handle_unsupported_message(chat_id)
     except Exception as exc:
         print("Error while processing Telegram webhook:", exc)
     finally:
+        indicator.cancel()
+        try:
+            await indicator
+        except asyncio.CancelledError:
+            pass
         await cleanup_service.cleanup_chat_history(chat_id)
         return {"ok": True}
+
+
+async def _chat_action_indicator(chat_id: str, action: str):
+    try:
+        while True:
+            await telegram_service.send_chat_action(chat_id, action)
+            await asyncio.sleep(4)
+    except asyncio.CancelledError:
+        pass

@@ -17,11 +17,13 @@ def test_webhook_photo_routes_to_unsupported(monkeypatch):
     handle_text_mock = AsyncMock()
     handle_voice_mock = AsyncMock()
     cleanup_mock = AsyncMock()
+    chat_action_mock = AsyncMock()
 
     monkeypatch.setattr(webhook_handler.message_handlers, "handle_unsupported_message", unsupported_mock)
     monkeypatch.setattr(webhook_handler.message_handlers, "handle_text_message", handle_text_mock)
     monkeypatch.setattr(webhook_handler.message_handlers, "handle_voice_message", handle_voice_mock)
     monkeypatch.setattr(webhook_handler.cleanup_service, "cleanup_chat_history", cleanup_mock)
+    monkeypatch.setattr(webhook_handler.telegram_service, "send_chat_action", chat_action_mock)
 
     result = asyncio.run(webhook_handler._handle_telegram_webhook_data(data))
 
@@ -44,11 +46,13 @@ def test_webhook_document_routes_to_unsupported(monkeypatch):
     handle_text_mock = AsyncMock()
     handle_voice_mock = AsyncMock()
     cleanup_mock = AsyncMock()
+    chat_action_mock = AsyncMock()
 
     monkeypatch.setattr(webhook_handler.message_handlers, "handle_unsupported_message", unsupported_mock)
     monkeypatch.setattr(webhook_handler.message_handlers, "handle_text_message", handle_text_mock)
     monkeypatch.setattr(webhook_handler.message_handlers, "handle_voice_message", handle_voice_mock)
     monkeypatch.setattr(webhook_handler.cleanup_service, "cleanup_chat_history", cleanup_mock)
+    monkeypatch.setattr(webhook_handler.telegram_service, "send_chat_action", chat_action_mock)
 
     result = asyncio.run(webhook_handler._handle_telegram_webhook_data(data))
 
@@ -70,10 +74,12 @@ def test_webhook_text_still_routes_to_text_handler(monkeypatch):
     handle_text_mock = AsyncMock(return_value="ok")
     unsupported_mock = AsyncMock()
     cleanup_mock = AsyncMock()
+    chat_action_mock = AsyncMock()
 
     monkeypatch.setattr(webhook_handler.message_handlers, "handle_text_message", handle_text_mock)
     monkeypatch.setattr(webhook_handler.message_handlers, "handle_unsupported_message", unsupported_mock)
     monkeypatch.setattr(webhook_handler.cleanup_service, "cleanup_chat_history", cleanup_mock)
+    monkeypatch.setattr(webhook_handler.telegram_service, "send_chat_action", chat_action_mock)
 
     result = asyncio.run(webhook_handler._handle_telegram_webhook_data(data))
 

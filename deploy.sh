@@ -13,14 +13,13 @@ S3_BUCKET="${S3_BUCKET:-}"
 ENVIRONMENT="dev"
 REGION="eu-central-1"
 PRIMARY_LAMBDA_NAME="calendar_bot_dev"
-TRANSCRIPT_LAMBDA_NAME="calendar_bot_dev_transcript"
 DEFAULT_S3_BUCKET="calendar-bot-dev-artifacts"
 
 if [[ -z "$S3_BUCKET" ]]; then
   S3_BUCKET="$DEFAULT_S3_BUCKET"
 fi
 
-LAMBDA_NAMES=("$PRIMARY_LAMBDA_NAME" "$TRANSCRIPT_LAMBDA_NAME")
+LAMBDA_NAMES=("$PRIMARY_LAMBDA_NAME")
 
 echo "========================================"
 echo "Deploying Lambda"
