@@ -24,6 +24,7 @@ MODEL_PROVIDER_UNAVAILABLE_MESSAGE = (
 )
 
 UNSUPPORTED_INPUT_MESSAGE = "Sorry, I can only process text or voice messages."
+VOICE_TOO_LONG_MESSAGE = "Sorry, I can process voice messages up to 2 minutes long."
 
 
 CLEAR_HISTORY_MESSAGE = (

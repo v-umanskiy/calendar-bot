@@ -1,6 +1,7 @@
 import asyncio
 import pytest
 from unittest.mock import AsyncMock, call
+from unittest.mock import MagicMock
 
 from tests.services import testing_helpers
 from src.messaging import message_handlers
@@ -17,6 +18,7 @@ from src.utils.constants import (
     EVENT_UPDATED_MESSAGE,
     EVENT_NOT_FOUND_MESSAGE,
     UNSUPPORTED_INPUT_MESSAGE,
+    VOICE_TOO_LONG_MESSAGE,
 )
 
 
@@ -511,3 +513,49 @@ def test_handle_unsupported_message_mentions_text_and_voice_only(monkeypatch):
 
     assert result == UNSUPPORTED_INPUT_MESSAGE
     send_message_mock.assert_awaited_once_with(chat_id, UNSUPPORTED_INPUT_MESSAGE)
+
+
+def test_handle_voice_message_rejects_duration_above_two_minutes(monkeypatch):
+    chat_id = "chat-voice"
+    voice = {"file_id": "voice-1", "duration": 121}
+
+    send_message_mock = AsyncMock()
+    download_mock = AsyncMock()
+    save_turn_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+    monkeypatch.setattr(message_handlers.telegram_service, "download_file_from_telegram", download_mock)
+    monkeypatch.setattr(message_handlers.history_table_service, "save_turn", save_turn_mock)
+
+    result = asyncio.run(message_handlers.handle_voice_message(voice, chat_id))
+
+    assert result == VOICE_TOO_LONG_MESSAGE
+    send_message_mock.assert_awaited_once_with(chat_id, VOICE_TOO_LONG_MESSAGE)
+    download_mock.assert_not_awaited()
+    assert save_turn_mock.await_args_list == [
+        call(chat_id, "user", "User sent a voice message with duration 121s (over 2 minutes)."),
+        call(chat_id, "assistant", VOICE_TOO_LONG_MESSAGE),
+    ]
+
+
+def test_handle_voice_message_accepts_duration_equal_two_minutes(monkeypatch):
+    chat_id = "chat-voice-ok"
+    voice = {"file_id": "voice-2", "duration": 120}
+
+    download_mock = AsyncMock(return_value=b"audio")
+    upload_mock = AsyncMock(return_value=("https://example.com/audio", "telegram-files/voices/voice-2.ogg"))
+    save_job_mock = AsyncMock()
+    transcribe_mock = MagicMock()
+    send_message_mock = AsyncMock()
+
+    monkeypatch.setattr(message_handlers.telegram_service, "download_file_from_telegram", download_mock)
+    monkeypatch.setattr(message_handlers.s3_service, "upload_file_to_s3", upload_mock)
+    monkeypatch.setattr(message_handlers.transcription_table_service, "save_transcription_job", save_job_mock)
+    monkeypatch.setattr(message_handlers.transcription_aws_service, "transcribe", transcribe_mock)
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+
+    result = asyncio.run(message_handlers.handle_voice_message(voice, chat_id))
+
+    assert result is None
+    download_mock.assert_awaited_once_with("voice-2")
+    send_message_mock.assert_not_awaited()
+    transcribe_mock.assert_called_once()

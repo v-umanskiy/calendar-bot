@@ -22,6 +22,7 @@ from src.utils.constants import (
     GOOGLE_CONNECT_MESSAGE,
     GOOGLE_CONNECT_BUTTON_TEXT,
     UNSUPPORTED_INPUT_MESSAGE,
+    VOICE_TOO_LONG_MESSAGE,
     EVENT_REMOVE_BUTTON_TEXT,
     EVENT_REMOVE_CALLBACK_DATA,
     EVENT_EDIT_CONFIRM_BUTTON_TEXT,
@@ -145,6 +146,17 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
 
 
 async def handle_voice_message(voice: any, chat_id: str) -> str | None:
+    duration = voice.get("duration")
+    if isinstance(duration, int) and duration > 120:
+        await history_table_service.save_turn(
+            chat_id,
+            "user",
+            f"User sent a voice message with duration {duration}s (over 2 minutes).",
+        )
+        await telegram_service.send_message(chat_id, VOICE_TOO_LONG_MESSAGE)
+        await history_table_service.save_turn(chat_id, "assistant", VOICE_TOO_LONG_MESSAGE)
+        return VOICE_TOO_LONG_MESSAGE
+
     file_id = voice["file_id"]
     file_bytes = await telegram_service.download_file_from_telegram(file_id)
     if file_bytes:
