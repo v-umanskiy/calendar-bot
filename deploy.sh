@@ -1,19 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Deploys tg-calendar-bot to dev.
+# Deploys tg-calendar-bot to the selected environment.
 # Usage:
-#   ./deploy.sh
+#   ./deploy.sh [dev|prod]
 
 PROFILE="personal"
 ZIP_NAME="deploy.zip"
 BUILD_DIR="build"
 REQ_FILE="requirements.txt"
 S3_BUCKET="${S3_BUCKET:-}"
-ENVIRONMENT="dev"
-REGION="eu-central-1"
-PRIMARY_LAMBDA_NAME="calendar_bot_dev"
-DEFAULT_S3_BUCKET="calendar-bot-dev-artifacts"
+ENVIRONMENT="${1:-dev}"
+
+case "$ENVIRONMENT" in
+  dev)
+    REGION="eu-central-1"
+    PRIMARY_LAMBDA_NAME="calendar_bot_dev"
+    DEFAULT_S3_BUCKET="calendar-bot-dev-artifacts"
+    ;;
+  prod)
+    REGION="eu-west-1"
+    PRIMARY_LAMBDA_NAME="calendar_bot_prod"
+    DEFAULT_S3_BUCKET="calendar-bot-prod-artifacts"
+    ;;
+  *)
+    echo "Unsupported environment: $ENVIRONMENT"
+    echo "Usage: ./deploy.sh [dev|prod]"
+    exit 1
+    ;;
+esac
 
 if [[ -z "$S3_BUCKET" ]]; then
   S3_BUCKET="$DEFAULT_S3_BUCKET"
