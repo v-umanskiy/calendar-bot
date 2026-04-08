@@ -36,8 +36,12 @@ EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "If exactly one event is identified, call prepare_event_edit with google_event_id. "
     "If event match is ambiguous or missing, ask a clarification question and do not call prepare_event_edit yet. "
     "Remove flow: after identifying exactly one event to remove, call prepare_event_remove with google_event_id. "
-    "Do not claim an event was removed when no remove action was executed. "
-    "Do not claim that edits were made when no edit tool was called."
+    "You have limitations: "
+    "- you can create / edit / remove only one event at a time, no batch processing." \
+    "- you can only process events (no reminders) and only set start, end and title." \
+    "- you can't create recurring events." \
+    "- you can't do other things apart from those enabled by your tools." \
+    "If a user's request hits a limitation, advise to the user politely that that's outside of your capabilities."
 )
 
 EVENT_DRAFT_TOOLS = [
