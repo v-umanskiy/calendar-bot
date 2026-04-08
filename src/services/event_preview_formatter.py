@@ -30,6 +30,8 @@ def build_event_edit_preview_text(event: dict, draft: dict | None) -> str:
         if patch_value is None:
             return f"{label}: {current_text}"
         next_text = format_datetime_for_user(patch_value) if label in {"Start", "End"} else str(patch_value)
+        if next_text == current_text:
+            return f"{label}: {current_text}"
         return f"{label}: {current_text} -> {next_text}"
 
     lines.append(_line("Title", safe_event.get("title"), title_patch))

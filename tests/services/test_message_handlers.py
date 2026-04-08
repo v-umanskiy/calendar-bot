@@ -188,10 +188,12 @@ def test_handle_text_message_event_created_payload_sends_remove_button(monkeypat
     send_with_markup_mock = AsyncMock(return_value={"message_id": 42})
     send_message_mock = AsyncMock()
     save_link_mock = AsyncMock()
+    delete_draft_mock = AsyncMock()
 
     monkeypatch.setattr(message_handlers.telegram_service, "send_message_with_reply_markup", send_with_markup_mock)
     monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
     monkeypatch.setattr(message_handlers.google_event_links_table_service, "save_event_link", save_link_mock)
+    monkeypatch.setattr(message_handlers.event_draft_table_service, "delete_event_draft", delete_draft_mock)
 
     asyncio.run(message_handlers.handle_text_message(chat_id, text))
 
@@ -207,6 +209,7 @@ def test_handle_text_message_event_created_payload_sends_remove_button(monkeypat
         calendar_id="primary",
         google_event_id="evt-1",
     )
+    delete_draft_mock.assert_awaited_once_with(chat_id)
 
 
 def test_handle_text_message_reconnect_reply_sends_connect_button(monkeypatch):

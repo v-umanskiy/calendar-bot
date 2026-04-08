@@ -73,6 +73,7 @@ async def handle_text_message(chat_id: str, text: str, *, is_transcribed: bool =
                 calendar_id=str(reply.get("calendar_id") or "primary"),
                 google_event_id=str(reply.get("google_event_id") or ""),
             )
+        await event_draft_table_service.delete_event_draft(chat_id)
         assistant_reply = summary
     elif reply_type == "event_edit_preview":
         preview = str(reply.get("text") or "")
