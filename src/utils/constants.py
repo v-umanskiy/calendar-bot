@@ -19,6 +19,13 @@ WELCOME_MESSAGE = (
     "Connect your Google Calendar to get started:"
 )
 
+DOCS_MESSAGE = (
+    "Project documents:\n"
+    "- [Privacy Policy](https://calendar-assistant.org/privacy)\n"
+    "- [Impressum](https://calendar-assistant.org/impressum)\n\n"
+    "By using this bot, you accept the Privacy Policy and Impressum."
+)
+
 
 MODEL_PROVIDER_LIMIT_REACHED_MESSAGE = (
     "We've hit the current AI usage limit. It is expected during the test phase. Let's try again tomorrow."

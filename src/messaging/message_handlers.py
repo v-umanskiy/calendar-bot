@@ -14,6 +14,7 @@ from src.utils import logging_utils
 from src.utils.constants import (
     TRANSCRIBED_VOICE_PROMPT_TEMPLATE,
     WELCOME_MESSAGE,
+    DOCS_MESSAGE,
     CLEAR_HISTORY_MESSAGE,
     HISTORY_CLEARED_MESSAGE,
     GOOGLE_CONNECT_MESSAGE,
@@ -203,6 +204,9 @@ async def _handle_message_codes(chat_id: str, text: str) -> str | None:
         logging_utils.log_prefixed_fields("GOOGLE_OAUTH_CONNECT_LINK_GENERATED", ("chat_id", chat_id))
         await telegram_service.send_message_with_reply_markup(chat_id, message, reply_markup)
         return message
+    if stripped_text == "/docs":
+        await telegram_service.send_message(chat_id, DOCS_MESSAGE)
+        return DOCS_MESSAGE
     if stripped_text == "/events":
         message = await google_calendar_service.list_primary_events_for_date(chat_id)
         await telegram_service.send_message(chat_id, message)

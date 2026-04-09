@@ -7,6 +7,7 @@ from tests.services import testing_helpers
 from src.messaging import message_handlers
 from src.utils.constants import (
     WELCOME_MESSAGE,
+    DOCS_MESSAGE,
     GOOGLE_CONNECT_MESSAGE,
     GOOGLE_CONNECT_BUTTON_TEXT,
     EVENT_RECONNECT_REQUIRED_MESSAGE,
@@ -163,6 +164,18 @@ def test_handle_message_code_events(monkeypatch):
 
     list_events_mock.assert_awaited_once_with(chat_id)
     send_message_mock.assert_awaited_once_with(chat_id, events_reply)
+
+
+def test_handle_message_code_docs(monkeypatch):
+    chat_id = "chat-docs"
+    text = "/docs"
+
+    send_message_mock = AsyncMock()
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+
+    asyncio.run(message_handlers.handle_text_message(chat_id, text))
+
+    send_message_mock.assert_awaited_once_with(chat_id, DOCS_MESSAGE)
 
 
 def test_handle_text_message_event_created_payload_sends_remove_button(monkeypatch):
