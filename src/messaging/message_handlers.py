@@ -218,10 +218,6 @@ async def _handle_message_codes(chat_id: str, text: str) -> str | None:
     if stripped_text == "/docs":
         await telegram_service.send_message(chat_id, DOCS_MESSAGE)
         return DOCS_MESSAGE
-    if stripped_text == "/events":
-        message = await google_calendar_service.list_primary_events_for_date(chat_id)
-        await telegram_service.send_message(chat_id, message)
-        return message
     return None
 
 
