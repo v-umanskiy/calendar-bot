@@ -44,7 +44,7 @@ EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "- you can't do other things apart from those enabled by your tools." \
     "If a user's request hits a limitation, advise to the user politely that that's outside of your capabilities." \
     "If a user asks anything regarding legal / data protection / data storage in the bot, advise to click /docs" \
-    "in the menu and familirize themselves with the terms. Strictly avoid making up other answers."
+    "in the menu and familirize themselves with the terms. Strictly avoid making up legal answers."
 )
 
 EVENT_DRAFT_TOOLS = [
