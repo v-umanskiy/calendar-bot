@@ -19,6 +19,8 @@ from src.utils.constants import (
     HISTORY_CLEARED_MESSAGE,
     GOOGLE_CONNECT_MESSAGE,
     GOOGLE_CONNECT_BUTTON_TEXT,
+    GOOGLE_DISCONNECT_SUCCESS_MESSAGE,
+    GOOGLE_DISCONNECT_MISSING_MESSAGE,
     UNSUPPORTED_INPUT_MESSAGE,
     VOICE_TOO_LONG_MESSAGE,
     EVENT_REMOVE_BUTTON_TEXT,
@@ -203,6 +205,15 @@ async def _handle_message_codes(chat_id: str, text: str) -> str | None:
         }
         logging_utils.log_prefixed_fields("GOOGLE_OAUTH_CONNECT_LINK_GENERATED", ("chat_id", chat_id))
         await telegram_service.send_message_with_reply_markup(chat_id, message, reply_markup)
+        return message
+    if stripped_text == "/disconnect":
+        disconnect_result = await google_oauth_service.disconnect_google_calendar(chat_id)
+        message = (
+            GOOGLE_DISCONNECT_SUCCESS_MESSAGE
+            if disconnect_result.get("was_connected")
+            else GOOGLE_DISCONNECT_MISSING_MESSAGE
+        )
+        await telegram_service.send_message(chat_id, message)
         return message
     if stripped_text == "/docs":
         await telegram_service.send_message(chat_id, DOCS_MESSAGE)

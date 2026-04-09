@@ -22,3 +22,10 @@ async def put_connection(item: dict):
         google_oauth_table.put_item,
         Item=item,
     )
+
+
+async def delete_connection(chat_id: str):
+    return await asyncio.to_thread(
+        google_oauth_table.delete_item,
+        Key={"chat_id": chat_id},
+    )

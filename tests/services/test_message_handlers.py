@@ -10,6 +10,8 @@ from src.utils.constants import (
     DOCS_MESSAGE,
     GOOGLE_CONNECT_MESSAGE,
     GOOGLE_CONNECT_BUTTON_TEXT,
+    GOOGLE_DISCONNECT_SUCCESS_MESSAGE,
+    GOOGLE_DISCONNECT_MISSING_MESSAGE,
     EVENT_RECONNECT_REQUIRED_MESSAGE,
     EVENT_EDIT_CONFIRM_BUTTON_TEXT,
     EVENT_EDIT_CONFIRM_CALLBACK_DATA,
@@ -176,6 +178,38 @@ def test_handle_message_code_docs(monkeypatch):
     asyncio.run(message_handlers.handle_text_message(chat_id, text))
 
     send_message_mock.assert_awaited_once_with(chat_id, DOCS_MESSAGE)
+
+
+def test_handle_message_code_disconnect_when_connected(monkeypatch):
+    chat_id = "chat-disc-1"
+    text = "/disconnect"
+
+    send_message_mock = AsyncMock()
+    disconnect_mock = AsyncMock(return_value={"ok": True, "was_connected": True, "revoked": True})
+
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+    monkeypatch.setattr(message_handlers.google_oauth_service, "disconnect_google_calendar", disconnect_mock)
+
+    asyncio.run(message_handlers.handle_text_message(chat_id, text))
+
+    disconnect_mock.assert_awaited_once_with(chat_id)
+    send_message_mock.assert_awaited_once_with(chat_id, GOOGLE_DISCONNECT_SUCCESS_MESSAGE)
+
+
+def test_handle_message_code_disconnect_when_not_connected(monkeypatch):
+    chat_id = "chat-disc-2"
+    text = "/disconnect"
+
+    send_message_mock = AsyncMock()
+    disconnect_mock = AsyncMock(return_value={"ok": True, "was_connected": False, "revoked": False})
+
+    monkeypatch.setattr(message_handlers.telegram_service, "send_message", send_message_mock)
+    monkeypatch.setattr(message_handlers.google_oauth_service, "disconnect_google_calendar", disconnect_mock)
+
+    asyncio.run(message_handlers.handle_text_message(chat_id, text))
+
+    disconnect_mock.assert_awaited_once_with(chat_id)
+    send_message_mock.assert_awaited_once_with(chat_id, GOOGLE_DISCONNECT_MISSING_MESSAGE)
 
 
 def test_handle_text_message_event_created_payload_sends_remove_button(monkeypatch):

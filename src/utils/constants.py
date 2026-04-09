@@ -53,6 +53,8 @@ GOOGLE_CONNECT_MESSAGE = (
     "After authorization, return to this chat."
 )
 GOOGLE_CONNECT_BUTTON_TEXT = "Connect Google Calendar"
+GOOGLE_DISCONNECT_SUCCESS_MESSAGE = "Google Calendar disconnected. Use /connect to connect again."
+GOOGLE_DISCONNECT_MISSING_MESSAGE = "Google Calendar is not connected."
 EVENT_SAVE_SUCCESS_MESSAGE_TEMPLATE = (
     "Saved to Google Calendar.\n"
     "Title: {title}\n"

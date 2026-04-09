@@ -10,6 +10,7 @@ import urllib.parse
 import httpx
 
 from src.utils import logging_utils
+from src.repository import google_oauth_repository
 from . import secret_service
 from . import google_oauth_token_service
 from . import telegram_service
@@ -18,6 +19,7 @@ from . import history_table_service
 
 GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_OAUTH_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 GOOGLE_PRIMARY_CALENDAR_URL = "https://www.googleapis.com/calendar/v3/calendars/primary"
 GOOGLE_PRIMARY_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 DEFAULT_GOOGLE_OAUTH_SCOPE = "https://www.googleapis.com/auth/calendar.events"
@@ -98,6 +100,59 @@ def build_oauth_connect_url(chat_id: str | int) -> str:
         "state": build_oauth_state(chat_id),
     }
     return f"{GOOGLE_OAUTH_AUTHORIZE_URL}?{urllib.parse.urlencode(params)}"
+
+
+async def _revoke_google_token(token: str) -> bool:
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            response = await client.post(
+                GOOGLE_OAUTH_REVOKE_URL,
+                data={"token": token},
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        except Exception as exc:
+            logging_utils.log_prefixed_fields(
+                "GOOGLE_OAUTH_REVOKE_REQUEST_ERROR",
+                ("error", repr(exc)),
+            )
+            return False
+    return response.is_success
+
+
+async def disconnect_google_calendar(chat_id: str | int) -> dict:
+    normalized_chat_id = str(chat_id)
+    item = await google_oauth_repository.get_connection(normalized_chat_id)
+    if not isinstance(item, dict):
+        return {"ok": True, "was_connected": False, "revoked": False}
+
+    token_to_revoke: str | None = None
+    refresh_token_enc = item.get("refresh_token_enc")
+    access_token_enc = item.get("access_token_enc")
+
+    try:
+        if isinstance(refresh_token_enc, str) and refresh_token_enc.strip():
+            token_to_revoke = await google_oauth_token_service._decrypt_value(refresh_token_enc, normalized_chat_id)
+        elif isinstance(access_token_enc, str) and access_token_enc.strip():
+            token_to_revoke = await google_oauth_token_service._decrypt_value(access_token_enc, normalized_chat_id)
+    except Exception as exc:
+        logging_utils.log_prefixed_fields(
+            "GOOGLE_OAUTH_REVOKE_TOKEN_DECRYPT_ERROR",
+            ("chat_id", normalized_chat_id),
+            ("error", repr(exc)),
+        )
+        token_to_revoke = None
+
+    revoked = False
+    if token_to_revoke:
+        revoked = await _revoke_google_token(token_to_revoke)
+        logging_utils.log_prefixed_fields(
+            "GOOGLE_OAUTH_REVOKE_RESULT",
+            ("chat_id", normalized_chat_id),
+            ("revoked", revoked),
+        )
+
+    await google_oauth_repository.delete_connection(normalized_chat_id)
+    return {"ok": True, "was_connected": True, "revoked": revoked}
 
 
 async def exchange_code_for_tokens(code: str) -> tuple[bool, dict]:
