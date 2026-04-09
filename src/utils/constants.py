@@ -8,9 +8,15 @@ TRANSCRIBED_VOICE_PROMPT_TEMPLATE = (
 
 
 WELCOME_MESSAGE = (
-    "Welcome to your Telegram Google Calendar assistant.\n\n"
-    "I can help you create and find events.\n\n"
-    "Connect your Google Calendar to get started."
+    "🗓 Welcome to your Telegram Google Calendar assistant!\n\n"
+    "What the bot can do:\n"
+    "- Create events\n"
+    "- Find events\n"
+    "- Edit and remove events\n\n" \
+    "You may send text and voice messages up to 2 minutes.\n\n"
+    "By using this bot, you accept the [Privacy Policy](https://calendar-assistant.org/privacy) "
+    "and [Impressum](https://calendar-assistant.org/impressum).\n\n"
+    "Connect your Google Calendar to get started:"
 )
 
 
