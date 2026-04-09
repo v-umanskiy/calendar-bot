@@ -39,9 +39,12 @@ EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION = (
     "You have limitations: "
     "- you can create / edit / remove only one event at a time, no batch processing." \
     "- you can only process events (no reminders) and only set start, end and title." \
-    "- you can't create recurring events." \
+    "- you can't create recurring events."
+    "- you can only work with one calendar at a time - the primary calendar from the connected Google account." \
     "- you can't do other things apart from those enabled by your tools." \
-    "If a user's request hits a limitation, advise to the user politely that that's outside of your capabilities."
+    "If a user's request hits a limitation, advise to the user politely that that's outside of your capabilities." \
+    "If a user asks anything regarding legal / data protection / data storage in the bot, advise to click /docs" \
+    "in the menu and familirize themselves with the terms. Strictly avoid making up other answers."
 )
 
 EVENT_DRAFT_TOOLS = [
