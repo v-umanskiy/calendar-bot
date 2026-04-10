@@ -14,16 +14,18 @@ WELCOME_MESSAGE = (
     "- Find events\n"
     "- Edit and remove events\n\n" \
     "You may send text and voice messages up to 2 minutes.\n\n"
-    "By using this bot, you accept the [Privacy Policy](https://calendar-assistant.org/privacy) "
-    "and [Impressum](https://calendar-assistant.org/impressum).\n\n"
+    "By using this bot, you accept the [Terms of Service](https://calendar-assistant.org/terms), "
+    "[Privacy Policy](https://calendar-assistant.org/privacy), and "
+    "[Impressum](https://calendar-assistant.org/impressum).\n\n"
     "Connect your Google Calendar to get started:"
 )
 
 DOCS_MESSAGE = (
     "Project documents:\n"
+    "- [Terms of Service](https://calendar-assistant.org/terms)\n"
     "- [Privacy Policy](https://calendar-assistant.org/privacy)\n"
     "- [Impressum](https://calendar-assistant.org/impressum)\n\n"
-    "By using this bot, you accept the Privacy Policy and Impressum."
+    "By using this bot, you accept the Terms of Service, Privacy Policy, and Impressum."
 )
 
 
