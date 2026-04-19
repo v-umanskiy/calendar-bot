@@ -2,7 +2,7 @@
 
 Telegram bot that manages Google Calendar with natural language and voice input.
 
-<img src="photo_2026-04-19 16.05.54.jpeg" alt="Bot screenshot" width="340" />
+<img src="docs/images/bot-screenshot.jpeg" alt="Bot screenshot" width="340" />
 
 ## What It Does
 
@@ -26,7 +26,7 @@ Telegram bot that manages Google Calendar with natural language and voice input.
 - KMS for OAuth token encryption/decryption
 - AWS Secrets Manager for app secrets
 
-![alt text](image.png)
+![Infrastructure diagram](docs/images/infra-diagram.png)
 
 ## AI Integration Model
 
