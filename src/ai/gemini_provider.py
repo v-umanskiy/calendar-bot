@@ -1,9 +1,6 @@
 import asyncio
 import json
 import os
-import threading
-import time
-from datetime import datetime, timezone
 from typing import Optional
 
 from google.api_core import exceptions as google_api_exceptions
@@ -17,6 +14,7 @@ from src.utils.constants import (
 from . import gemini_tools
 from . import gemini_decision_service
 from . import gemini_tool_executor
+from . import gemini_cache
 from src.services import secret_service
 from src.utils import datetime_utils
 
@@ -30,10 +28,6 @@ ACTION_TERMINAL_PROTOCOL = "terminal_protocol"
 
 _MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 _CLIENT = genai.Client(api_key=secret_service.get_secret("GEMINI_API_KEY"))
-_CACHE_TTL_SECONDS = int(os.getenv("GEMINI_CONTEXT_CACHE_TTL_SECONDS", "3600"))
-_CACHE_ID: str | None = None
-_CACHE_EXPIRES_AT: float | None = None
-_CACHE_LOCK = threading.Lock()
 
 
 async def generate_reply(
@@ -79,7 +73,13 @@ def _run_with_tools(
         ("SYSTEM_PROMPT", gemini_tools.EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION),
     )
 
-    response = _generate_with_cached_context(contents)
+    response = gemini_cache.generate_with_cached_context(
+        client=_CLIENT,
+        model_name=_MODEL_NAME,
+        contents=contents,
+        system_instruction=gemini_tools.EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION,
+        tools=gemini_tools.EVENT_DRAFT_TOOLS,
+    )
 
     function_calls = gemini_tools.extract_function_calls(response)
     if not function_calls:
@@ -173,7 +173,13 @@ def _execute_tool_calls_and_build_reply(
             current_contents,
             tool_results=model_results,
         )
-        response = _generate_with_cached_context(current_contents)
+        response = gemini_cache.generate_with_cached_context(
+            client=_CLIENT,
+            model_name=_MODEL_NAME,
+            contents=current_contents,
+            system_instruction=gemini_tools.EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION,
+            tools=gemini_tools.EVENT_DRAFT_TOOLS,
+        )
         pending_calls = gemini_tools.extract_function_calls(response)
         if not pending_calls:
             return {
@@ -270,84 +276,3 @@ def _convert_history(history: Optional[ModelHistory]) -> list[dict]:
         role = "user" if turn.get("role") == "user" else "model"
         converted.append({"role": role, "parts": parts})
     return converted
-
-
-def _create_cache() -> str:
-    global _CACHE_ID, _CACHE_EXPIRES_AT
-
-    cache = _CLIENT.caches.create(
-        model=f"models/{_MODEL_NAME}",
-        config={
-            "display_name": "tg-calendar-bot-static-context",
-            "system_instruction": gemini_tools.EVENT_DRAFT_TOOL_SYSTEM_INSTRUCTION,
-            "tools": gemini_tools.EVENT_DRAFT_TOOLS,
-            "ttl": f"{_CACHE_TTL_SECONDS}s",
-        },
-    )
-    _CACHE_ID = str(cache.name)
-    expire_time = getattr(cache, "expire_time", None)
-    if isinstance(expire_time, datetime):
-        dt = expire_time.astimezone(timezone.utc) if expire_time.tzinfo else expire_time.replace(tzinfo=timezone.utc)
-        _CACHE_EXPIRES_AT = dt.timestamp()
-    else:
-        _CACHE_EXPIRES_AT = time.time() + _CACHE_TTL_SECONDS
-    logging_utils.log_prefixed_fields(
-        "GEMINI_CACHE_CREATE",
-        ("cache_id", _CACHE_ID),
-        ("expires_at_epoch", _CACHE_EXPIRES_AT),
-        ("ttl_seconds", _CACHE_TTL_SECONDS),
-    )
-    return _CACHE_ID
-
-
-def _ensure_cache_id(*, force_recreate: bool = False) -> str:
-    global _CACHE_ID
-
-    with _CACHE_LOCK:
-        now = time.time()
-        is_expired = _CACHE_EXPIRES_AT is not None and now >= _CACHE_EXPIRES_AT
-        if force_recreate:
-            return _create_cache()
-        if _CACHE_ID and not is_expired:
-            logging_utils.log_prefixed_fields(
-                "GEMINI_CACHE_REUSE",
-                ("cache_id", _CACHE_ID),
-                ("expires_at_epoch", _CACHE_EXPIRES_AT),
-            )
-            return _CACHE_ID
-        return _create_cache()
-
-
-def _is_cache_error(exc: Exception) -> bool:
-    text = str(exc).lower()
-    return "cached" in text and (
-        "not found" in text
-        or "expired" in text
-        or "invalid" in text
-        or "failed precondition" in text
-    )
-
-
-def _generate_with_cached_context(contents: list[dict]):
-    cache_id = _ensure_cache_id()
-    config = {"cached_content": cache_id}
-    try:
-        return _CLIENT.models.generate_content(
-            model=_MODEL_NAME,
-            contents=contents,
-            config=config,
-        )
-    except Exception as exc:
-        if not _is_cache_error(exc):
-            raise
-        logging_utils.log_prefixed_fields(
-            "GEMINI_CACHE_RECREATE_ON_ERROR",
-            ("error", repr(exc)),
-            ("cache_id", cache_id),
-        )
-        new_cache_id = _ensure_cache_id(force_recreate=True)
-        return _CLIENT.models.generate_content(
-            model=_MODEL_NAME,
-            contents=contents,
-            config={"cached_content": new_cache_id},
-        )
