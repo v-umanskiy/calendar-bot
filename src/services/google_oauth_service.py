@@ -217,7 +217,13 @@ async def _resolve_primary_events_list_timezone(access_token: str) -> str | None
     timezone_name = payload.get("timeZone")
     if not isinstance(timezone_name, str) or not timezone_name.strip():
         return None
-    return timezone_name.strip()
+    resolved_timezone = timezone_name.strip()
+    logging_utils.log_prefixed_fields(
+        "GOOGLE_PRIMARY_EVENTS_TIMEZONE_RESOLVED",
+        ("status_code", response.status_code),
+        ("timezone", resolved_timezone),
+    )
+    return resolved_timezone
 
 
 async def process_oauth_callback(
@@ -324,6 +330,13 @@ async def process_oauth_callback(
             ("chat_id", chat_id),
             ("error", repr(exc)),
         )
+
+    logging_utils.log_prefixed_fields(
+        "GOOGLE_OAUTH_TIMEZONE_PERSISTED",
+        ("correlation_id", correlation_id),
+        ("chat_id", chat_id),
+        ("timezone", resolved_timezone),
+    )
 
     logging_utils.log_prefixed_fields(
         "GOOGLE_OAUTH_TOKEN_EXCHANGE_SUCCESS",

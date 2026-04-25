@@ -42,11 +42,36 @@ def _build_validation_result(
 async def _get_user_tzinfo(chat_id: int | str):
     item = await google_oauth_repository.get_connection(str(chat_id))
     timezone_name = item.get("timezone") if isinstance(item, dict) else None
+    logging_utils.log_prefixed_fields(
+        "EVENT_DRAFT_TIMEZONE_STORED_VALUE",
+        ("chat_id", str(chat_id)),
+        ("timezone", timezone_name),
+    )
     if isinstance(timezone_name, str) and timezone_name.strip():
+        normalized_timezone_name = timezone_name.strip()
         try:
-            return ZoneInfo(timezone_name.strip())
-        except ZoneInfoNotFoundError:
-            pass
+            resolved = ZoneInfo(normalized_timezone_name)
+            logging_utils.log_prefixed_fields(
+                "EVENT_DRAFT_TIMEZONE_RESOLVE_SUCCESS",
+                ("chat_id", str(chat_id)),
+                ("timezone", normalized_timezone_name),
+            )
+            return resolved
+        except ZoneInfoNotFoundError as exc:
+            logging_utils.log_prefixed_fields(
+                "EVENT_DRAFT_TIMEZONE_RESOLVE_FALLBACK_UTC",
+                ("chat_id", str(chat_id)),
+                ("timezone", normalized_timezone_name),
+                ("reason", "zoneinfo_not_found"),
+                ("error", repr(exc)),
+            )
+    else:
+        logging_utils.log_prefixed_fields(
+            "EVENT_DRAFT_TIMEZONE_RESOLVE_FALLBACK_UTC",
+            ("chat_id", str(chat_id)),
+            ("timezone", timezone_name),
+            ("reason", "missing_timezone"),
+        )
     return timezone.utc
 
 
