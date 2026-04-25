@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
-def current_time_context_block() -> str:
-    now_local = datetime.now().astimezone()
+def current_time_context_block(*, tzinfo) -> str:
+    now_local = datetime.now(tz=tzinfo)
     current_time_iso = now_local.replace(tzinfo=None).isoformat(timespec="seconds")
     weekday_name = now_local.strftime("%A")
     return (

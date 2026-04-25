@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from datetime import timezone
 from typing import Optional
 
 from google.api_core import exceptions as google_api_exceptions
@@ -16,6 +17,7 @@ from . import gemini_decision_service
 from . import gemini_tool_executor
 from . import gemini_cache
 from src.services import secret_service
+from src.services import event_draft_table_service
 from src.utils import datetime_utils
 
 ModelHistory = list[dict]
@@ -36,8 +38,17 @@ async def generate_reply(
     history: Optional[ModelHistory] = None,
 ) -> ModelReply:
     gemini_history = _convert_history(history)
+    user_tzinfo = timezone.utc
+    try:
+        user_tzinfo = await event_draft_table_service._get_user_tzinfo(chat_id)
+    except Exception as exc:
+        logging_utils.log_prefixed_fields(
+            "GEMINI_USER_TIMEZONE_RESOLVE_FALLBACK_UTC",
+            ("chat_id", chat_id),
+            ("error", repr(exc)),
+        )
     dynamic_prompt = (
-        f"{datetime_utils.current_time_context_block().strip()}\n\n"
+        f"{datetime_utils.current_time_context_block(tzinfo=user_tzinfo).strip()}\n\n"
         f"User request:\n{prompt}"
     )
     contents = _build_contents(gemini_history, [{"text": dynamic_prompt}])
