@@ -318,7 +318,8 @@ async def process_oauth_callback(
         normalized_chat_id = chat_id.strip()
         if normalized_chat_id and normalized_chat_id.lstrip("-").isdigit():
             telegram_chat_id = int(normalized_chat_id)
-    connect_message = "Google Calendar connected."
+    timezone_label = resolved_timezone or "(not resolved)"
+    connect_message = f"Google Calendar connected.\nTimezone: {timezone_label}"
     try:
         sent = await telegram_service.send_message(telegram_chat_id, connect_message)
         if sent is not None:
