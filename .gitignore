@@ -4,3 +4,7 @@ deploy.zip
 .pytest_cache/
 __pycache__/
 *.pyc
+.env
+.env.*
+!.env.example
+.vscode/launch.json

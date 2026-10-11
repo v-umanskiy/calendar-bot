@@ -43,3 +43,34 @@ Telegram bot that manages Google Calendar with natural language and voice input.
   - max tool calls per turn
   - invalid tool output repair loop
   - explicit confirmation before destructive actions
+
+## Configuration and Secrets
+
+No secret is stored in the repository or read from environment variables.
+All secrets are loaded at runtime from one AWS Secrets Manager secret (JSON),
+referenced by `SECRETS_ARN`. OAuth tokens are additionally encrypted with KMS
+before they are written to DynamoDB.
+
+Expected keys in the secret:
+
+| Key | Purpose |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot API |
+| `WEBHOOK_SECRET` | Verifies incoming Telegram webhook calls |
+| `GEMINI_API_KEY` | Gemini tool-calling |
+| `OPENAI_API_KEY` | Whisper transcription |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` | Google OAuth 2.0 |
+| `GOOGLE_OAUTH_STATE_SECRET` | Signs the OAuth `state` parameter |
+
+Non-secret settings (table names, bucket, KMS key id) are plain environment
+variables, see `.env.example`.
+
+## Local Development
+
+1. `pip install -r requirements.txt`
+2. `cp .env.example .env` and fill in your own AWS profile and resource names
+3. `uvicorn app:app --reload` (or the "FastAPI" launch config in VS Code)
+4. `pytest` (tests use dummy secrets and need no AWS access)
+
+`.env` and `.vscode/launch.json` are git-ignored. A [gitleaks](https://github.com/gitleaks/gitleaks)
+pre-commit hook is configured: `pip install pre-commit && pre-commit install`.
